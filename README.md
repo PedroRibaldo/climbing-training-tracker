@@ -60,7 +60,7 @@ A personal climbing training dashboard built with **Streamlit**, backed by a **G
 
 ```bash
 git clone https://github.com/PedroRibaldo/climbing-training-tracker.git
-cd <your-repo>
+cd climbing-training-tracker
 ```
 
 ### 2. Create a virtual environment and install dependencies
