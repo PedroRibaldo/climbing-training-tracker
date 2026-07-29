@@ -454,6 +454,84 @@ def delete_exercise(row_idx: int, config: Optional[PipelineConfig] = None) -> bo
     worksheet.delete_rows(row_idx)
     return True
 
+
+# ============================================================
+# Analytics
+#
+# Pure functions over already-cleaned DataFrames.
+# Kept separate from app.py plotting code so the
+# calculations are unit-testable without a Streamlit runtime.
+# ============================================================
+
+def compute_acwr(df_past: pd.DataFrame, acute_window: int = 7, chronic_window: int = 28) -> pd.DataFrame:
+    """Acute:Chronic Workload Ratio - a metric of training
+    load trend, used as an injury-risk / readiness signal
+
+    Daily load is the sum of Effort Scale across all sessions on that day.
+    Days with no session count as 0 load, so a string of rest days pulls
+    the rolling average down same as it would in real training. `acute`
+    is the rolling mean load over the last `acute_window` days (short-term
+    fatigue); `chronic` is the rolling mean over the last `chronic_window`
+    days. ACWR = acute / chronic - commonly cited as "sweet spot" in the
+    sports-science literature this metric comes from is roughly 0.8-1.3,
+    with values above ~1.5 associated with elevated injury risk from ramping
+    load too fast.
+
+    Returns a DataFrame indexed by date with columns:
+    daily_load, acute_load, chronic_load, acwr (NaN wherever chronic_load
+    is 0, since the ratio is undefined with no training history yet)
+    """
+    if df_past.empty:
+        return pd.DataFrame(columns=['daily_load', 'acute_load', 'chronic_load', 'acwr'])
+
+    sessions_with_effort = df_past.dropna(subset=['effort'])
+    if sessions_with_effort.empty:
+        return pd.DataFrame(columns=['daily_load', 'acute_load', 'chronic_load', 'acwr'])
+
+    daily_load = sessions_with_effort.groupby(
+        sessions_with_effort['date'].dt.normalize()
+    )['effort'].sum()
+
+    full_range = pd.date_range(daily_load.index.min(), daily_load.index.max(), freq='D')
+    daily_load = daily_load.reindex(full_range, fill_value=0)
+    daily_load.index.name = 'date'
+
+    acute_load = daily_load.rolling(window=acute_window, min_periods=1).mean()
+    chronic_load = daily_load.rolling(window=chronic_window, min_periods=1).mean()
+    acwr = (acute_load / chronic_load).where(chronic_load > 0)
+
+    return pd.DataFrame({
+        'daily_load': daily_load,
+        'acute_load': acute_load,
+        'chronic_load': chronic_load,
+        'acwr': acwr,
+    })
+
+
+def get_peak_sessions(df: pd.DataFrame, n: int = 3) -> pd.DataFrame:
+    """Rank sessions by a "how strong was this session" score and
+    return the top n.
+
+    Score weights grade achieved first (gym_numeric + moonboard_numeric)
+    with effort as a tiebreaker, so a session where you hit a new grade
+    outranks one that was merely high-effort with no grade logged. 
+    Rest days are excluded
+    """
+    if df.empty:
+        return df.assign(score=pd.Series(dtype=float))
+
+    ranked = df[df['category'] != 'Rest'].copy()
+    if ranked.empty:
+        return ranked.assign(score=pd.Series(dtype=float))
+
+    ranked['score'] = (
+        ranked['gym_numeric'].clip(lower=0)
+        + ranked['moonboard_numeric'].clip(lower=0)
+        + ranked['effort'].fillna(0) / 10
+    )
+    return ranked.sort_values('score', ascending=False).head(n)
+
+
 if __name__ == "__main__":
     # Quick manual smoke test when running this file directly
     past, future, exercises = load_clean_data()

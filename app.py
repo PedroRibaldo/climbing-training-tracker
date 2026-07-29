@@ -16,7 +16,7 @@ import matplotlib.dates as mdates
 import seaborn as sns
 from streamlit_calendar import calendar
 
-from data_pipeline import load_clean_data, update_session, add_session, delete_session, add_exercise, update_exercise, delete_exercise, PipelineConfig
+from data_pipeline import load_clean_data, update_session, add_session, delete_session, add_exercise, update_exercise, delete_exercise, compute_acwr, get_peak_sessions, PipelineConfig
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Climbing Training Tracker", layout="wide")
@@ -372,6 +372,74 @@ if len(date_range) == 2:
             st.pyplot(fig_dist, use_container_width=True)
         else:
             st.info("No training sessions logged.")
+    st.markdown("---")
+    st.subheader("🎯 Advanced Analytics")
+
+    col4, col5 = st.columns(2)
+
+    with col4:
+        st.markdown("**📉 Acute:Chronic Workload Ratio**")
+        # Computed over the full training history (not just the selected
+        # range)
+        acwr_df = compute_acwr(df_past)
+        acwr_windowed = acwr_df[(acwr_df.index.date >= start_date) & (acwr_df.index.date <= end_date)]
+
+        if not acwr_windowed.empty and acwr_windowed['acwr'].notna().any():
+            fig_acwr, ax_acwr = plt.subplots(figsize=(5, 3.5))
+            band_top = max(2.0, acwr_windowed['acwr'].max(skipna=True) + 0.2)
+            ax_acwr.axhspan(0.8, 1.3, color='#28B463', alpha=0.15, label='Sweet spot')
+            ax_acwr.axhspan(1.3, 1.5, color='#F5B041', alpha=0.15, label='Caution')
+            ax_acwr.axhspan(1.5, band_top, color='#E74C3C', alpha=0.15, label='High risk')
+            sns.lineplot(data=acwr_windowed, x=acwr_windowed.index, y='acwr', marker='o', color='#2E86C1', ax=ax_acwr)
+            ax_acwr.set_ylabel("ACWR")
+            ax_acwr.set_xlabel("")
+            ax_acwr.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
+            plt.xticks(rotation=45)
+            ax_acwr.legend(loc='upper left', fontsize='x-small')
+            st.pyplot(fig_acwr, use_container_width=True)
+            st.caption("Recent (7-day) vs. baseline (28-day) training load. Needs a few weeks of consistent logging to be meaningful.")
+        else:
+            st.info("Not enough training history yet to compute ACWR.")
+
+    with col5:
+        st.markdown("**🎯 Effort vs. Grade Yield**")
+        df_yield = df_analytics.dropna(subset=['effort'])
+        df_gym_yield = df_yield[df_yield['gym_numeric'] != -1]
+        df_mb_yield = df_yield[df_yield['moonboard_numeric'] != -1]
+
+        if not df_gym_yield.empty or not df_mb_yield.empty:
+            fig_yield, ax_yield = plt.subplots(figsize=(5, 3.5))
+            if not df_gym_yield.empty:
+                ax_yield.scatter(df_gym_yield['effort'], df_gym_yield['gym_numeric'], color='#2E86C1', label='Gym', alpha=0.7)
+            if not df_mb_yield.empty:
+                ax_yield.scatter(df_mb_yield['effort'], df_mb_yield['moonboard_numeric'], color='#8E44AD', label='Moonboard', alpha=0.7)
+            ax_yield.set_xlabel("Effort (1-10)")
+            ax_yield.set_ylabel("Max grade (encoded)")
+            ax_yield.legend(loc='upper left', fontsize='small')
+            st.pyplot(fig_yield, use_container_width=True)
+        else:
+            st.info("No grade data logged in this range.")
+
+    st.markdown("**🏆 Peak Performance Highlights**")
+    top_sessions = get_peak_sessions(df_analytics, n=3)
+
+    if not top_sessions.empty:
+        gym_rev_map = {v: k for k, v in PipelineConfig.GYM_MAPPING.items()}
+        mb_rev_map = {v: k for k, v in PipelineConfig.MOONBOARD_MAPPING.items()}
+        highlight_cols = st.columns(len(top_sessions))
+
+        for col, (_, session) in zip(highlight_cols, top_sessions.iterrows()):
+            with col:
+                st.markdown(f"**{session['date'].strftime('%d/%m/%Y')}**")
+                st.caption(session['category'])
+                if session['gym_numeric'] != -1:
+                    st.write(f"🧗 Gym: {gym_rev_map.get(int(session['gym_numeric']), '—')}")
+                if session['moonboard_numeric'] != -1:
+                    st.write(f"🪨 Moonboard: {mb_rev_map.get(int(session['moonboard_numeric']), '—')}")
+                if pd.notna(session['effort']):
+                    st.write(f"🔥 Effort: {int(session['effort'])}/10")
+    else:
+        st.info("No sessions to highlight in this range yet.")
 else:
     st.warning("Please select an end date to view analytics.")
 
