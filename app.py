@@ -16,7 +16,7 @@ import matplotlib.dates as mdates
 import seaborn as sns
 from streamlit_calendar import calendar
 
-from data_pipeline import load_clean_data, update_session, add_session, delete_session, PipelineConfig
+from data_pipeline import load_clean_data, update_session, add_session, delete_session, add_exercise, update_exercise, delete_exercise, PipelineConfig
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Climbing Training Tracker", layout="wide")
@@ -374,3 +374,81 @@ if len(date_range) == 2:
             st.info("No training sessions logged.")
 else:
     st.warning("Please select an end date to view analytics.")
+
+# --- EXERCISE LIBRARY (CRUD) ---
+st.markdown("---")
+st.header("🏋️ Exercise Library")
+st.markdown("*Add, edit, or delete exercises here*")
+
+_dict_display_cols = [c for c in df_dict.columns if c != 'gsheet_row']
+df_dict_display = df_dict[_dict_display_cols].reset_index(drop=True)
+_row_lookup = df_dict.reset_index(drop=True)['gsheet_row'].to_dict() if 'gsheet_row' in df_dict.columns else {}
+
+_editor_column_config = {}
+if 'type' in df_dict_display.columns:
+    _editor_column_config['type'] = st.column_config.SelectboxColumn("Type", options=PipelineConfig.ALLOWED_EXERCISE_TYPES)
+if 'phase' in df_dict_display.columns:
+    _editor_column_config['phase'] = st.column_config.SelectboxColumn("Phase", options=PipelineConfig.ALLOWED_PHASES)
+
+edited_df = st.data_editor(
+    df_dict_display,
+    num_rows="dynamic",
+    use_container_width=True,
+    key="exercise_editor",
+    column_config=_editor_column_config,
+)
+
+# Maps the editors internal field names to the sheets actual column headers
+_FIELD_TO_SHEET_COL = {
+    'name': 'Name',
+    'type': 'Type',
+    'sets': 'Sets',
+    'reps': 'Reps/Time',
+    'rest': 'Rest',
+    'comments': 'Comments',
+    'phase': 'Phase',
+}
+
+if st.button("💾 Save Exercise Library Changes", use_container_width=True):
+    changes = st.session_state.get("exercise_editor", {})
+    any_change = False
+
+    # Edits to existing rows
+    for idx_str, changed_fields in changes.get("edited_rows", {}).items():
+        gsheet_row = _row_lookup.get(int(idx_str))
+        if gsheet_row is None:
+            continue
+        payload = {
+            _FIELD_TO_SHEET_COL[field]: value
+            for field, value in changed_fields.items()
+            if field in _FIELD_TO_SHEET_COL
+        }
+        if payload:
+            update_exercise(int(gsheet_row), payload)
+            any_change = True
+
+    # Deletions
+    deleted_rows = sorted(
+        (_row_lookup[i] for i in changes.get("deleted_rows", []) if i in _row_lookup),
+        reverse=True
+    )
+    for gsheet_row in deleted_rows:
+        delete_exercise(int(gsheet_row))
+        any_change = True
+
+    # New rows added at the bottom of the grid
+    for new_row in changes.get("added_rows", []):
+        payload = {
+            _FIELD_TO_SHEET_COL[field]: value
+            for field, value in new_row.items()
+            if field in _FIELD_TO_SHEET_COL
+        }
+        if str(payload.get('Name') or '').strip():
+            add_exercise(payload)
+            any_change = True
+
+    if any_change:
+        fetch_data.clear()
+        st.rerun()
+    else:
+        st.info("No changes to save.")
