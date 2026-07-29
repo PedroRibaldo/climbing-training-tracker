@@ -16,7 +16,7 @@ import matplotlib.dates as mdates
 import seaborn as sns
 from streamlit_calendar import calendar
 
-from data_pipeline import load_clean_data, update_session_in_sheet, add_session_to_sheet, delete_session_from_sheet, PipelineConfig
+from data_pipeline import load_clean_data, update_session, add_session, delete_session, PipelineConfig
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Climbing Training Tracker", layout="wide")
@@ -115,7 +115,7 @@ def edit_session_modal(session_data, is_new=False):
 
     # 3. Form inputs
     if is_new:
-        cat_opts = ["Strength", "Stamina", "Technique", "Free", "Rest"]
+        cat_opts = PipelineConfig.ALLOWED_CATEGORIES
         new_cat = st.selectbox("Category", cat_opts)
     else:
         st.write(f"**Category:** {session_data['category']}")
@@ -148,7 +148,7 @@ def edit_session_modal(session_data, is_new=False):
                     # args=(ex,) safely passes this specific exercise to the callback
                     st.button(f"{ex} ✖", key=f"del_{i}_{ex}", on_click=remove_exercise, args=(ex,), use_container_width=True)
     else:
-        st.info("No exercises logged for this session yet.")
+        st.info("No exercises logged for this session yet")
 
     # Don't offer exercises that are already logged for this session
     filtered_exercises = [ex for ex in available_exercises if ex not in current_list]
@@ -173,7 +173,7 @@ def edit_session_modal(session_data, is_new=False):
                 'Max Moonboard Grade': new_mb,
                 'Exercises': st.session_state.edit_exercises
             }
-            if add_session_to_sheet(new_session_data):
+            if add_session(new_session_data):
                 fetch_data.clear()
                 st.rerun()
     else:
@@ -186,12 +186,12 @@ def edit_session_modal(session_data, is_new=False):
                     'Max Moonboard Grade': new_mb,
                     'Exercises': st.session_state.edit_exercises
                 }
-                if update_session_in_sheet(int(session_data['gsheet_row']), updated_data):
+                if update_session(int(session_data['gsheet_row']), updated_data):
                     fetch_data.clear()
                     st.rerun()
         with col_del:
             if st.button("🗑️ Delete Session", use_container_width=True):
-                if delete_session_from_sheet(int(session_data['gsheet_row'])):
+                if delete_session(int(session_data['gsheet_row'])):
                     fetch_data.clear()
                     st.rerun()
 

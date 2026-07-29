@@ -147,7 +147,7 @@ Populated by your Google Form responses (one row per submitted session). Expecte
 | `Exercises`               | Comma-separated list of exercises performed    |
 
 ### `Exercise_Dictionary`
-A reference table of exercises available for selection in the dashboard's "Add exercise" dropdown. Expected columns:
+Populated by the **Add Exercise** widget. A reference table of exercises available for selection in the dashboard's "Add exercise" dropdown. Expected columns:
 
 | Column       | Description                        |
 |---------------|--------------------------------------|
@@ -157,12 +157,18 @@ A reference table of exercises available for selection in the dashboard's "Add e
 | `Reps/Time`    | Number of reps or time (mm:ss)      |
 | `Rest`         | Number in minutes                   |
 | `Comments`     | Use "-" for no comments             |
+| `Phase`        | Before / During / After             |
+
+### Data validation
+
+Every row fetched from either worksheet is validated (via [Pydantic](https://docs.pydantic.dev)) before it reaches the dashboard - wrong types, typo'd grades/categories, or a missing date get that row skipped rather than crashing the app.
 
 ---
 
 ## Roadmap
 
-- [ ] Add [Pydantic](https://docs.pydantic.dev) models to validate row schemas coming from Google Sheets before they're processed.
+- [x] Add [Pydantic](https://docs.pydantic.dev) models to validate row schemas coming from Google Sheets before they're processed.
+- [ ] Exercise Dictionary CRUD screen in the dashboard (`st.data_editor`).
 - [ ] Add automated tests for the data cleaning logic in `data_pipeline.py`.
 - [x] Change Google Form to android widget with google sheets Apps Script.
 - [x] Deploy to Streamlit Community Cloud.
