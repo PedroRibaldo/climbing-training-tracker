@@ -100,11 +100,12 @@ function logSession_(body) {
  *
  * Expected body fields:
  *   name       required
- *   type       either "Reps" or "Time"
+ *   type       either "Reps" | "Time"
  *   sets       number of sets
  *   reps       reps or duration, e.g. "12" or "00:15" (mm:ss)
  *   rest       number in minutes
  *   comments   free text, optional
+ *   phase      "Before" | "During" | "After"
  */
 function addExercise_(body) {
   if (!body.name || body.name.toString().trim() === '') {
@@ -119,7 +120,8 @@ function addExercise_(body) {
     body.sets || '',
     body.reps || '',
     body.rest || '',
-    body.comments || ''
+    body.comments || '',
+    body.phase || ''
   ]);
 
   return jsonResponse_({ success: true });
