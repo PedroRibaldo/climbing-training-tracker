@@ -15,6 +15,9 @@ A personal climbing training dashboard built with **Streamlit**, backed by a **G
 - **✏️ Click-to-edit sessions** - click any logged day to edit effort, grades, or exercises, or click a blank day to log a missed session.
 - **🏋️ Exercise Library editor** - add, edit, or delete exercises in an Excel-like grid.
 - **📈 Analytics dashboard** - effort trend, gym/Moonboard grade progression, and training category distribution over any custom date range.
+- **📉 Training load tracking** - Acute:Chronic Workload Ratio (ACWR) chart flags whether recent training load is in a sustainable range or ramping into higher-injury-risk territory.
+- **🎯 Effort vs. Grade** - scatterplot relating perceived effort to the grades actually achieved, gym and Moonboard.
+- **🏆 Peak Performance Highlights** - surfaces top 3 strongest sessions in any selected date range.
 - **📱 One-tap mobile logging** - two Android home screen widgets log a session or register a new exercise directly into the spreadsheet.
 - **🔄 Two-way sync with Google Sheets** - reads from and writes back to the same spreadsheet your Google Form feeds into, so no data ever lives in two places.
 
