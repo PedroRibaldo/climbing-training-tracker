@@ -9,7 +9,7 @@ Run with: pytest
 import pandas as pd
 import pytest
 
-from data_pipeline import clean_data, PipelineConfig
+from data_pipeline import clean_data, compute_acwr, get_peak_sessions, PipelineConfig
 
 
 @pytest.fixture
@@ -153,3 +153,68 @@ class TestExerciseValidation:
         _, _, df_dict = clean_data([], rows, config)
         assert len(df_dict) == 1
         assert df_dict.iloc[0]['phase'] is None
+
+
+class TestComputeACWR:
+
+    def test_constant_load_converges_to_one(self):
+        dates = pd.date_range('2026-06-01', periods=30, freq='D')
+        df = pd.DataFrame({'date': dates, 'effort': [5] * 30, 'category': ['Strength'] * 30})
+        acwr = compute_acwr(df)
+        assert abs(acwr['acwr'].iloc[-1] - 1.0) < 0.05
+
+    def test_load_ramp_produces_acwr_above_one(self):
+        dates = pd.date_range('2026-06-01', periods=30, freq='D')
+        efforts = [2] * 20 + [9] * 10
+        df = pd.DataFrame({'date': dates, 'effort': efforts, 'category': ['Strength'] * 30})
+        acwr = compute_acwr(df)
+        assert acwr['acwr'].iloc[-1] > 1.2
+
+    def test_gap_days_count_as_zero_load(self):
+        dates = pd.to_datetime(['2026-06-01', '2026-06-03'])
+        df = pd.DataFrame({'date': dates, 'effort': [5, 5], 'category': ['Strength', 'Strength']})
+        acwr = compute_acwr(df)
+        assert len(acwr) == 3
+        assert acwr.loc[pd.Timestamp('2026-06-02'), 'daily_load'] == 0
+
+    def test_empty_dataframe_returns_empty_result(self):
+        df = pd.DataFrame(columns=['date', 'effort', 'category'])
+        assert compute_acwr(df).empty
+
+    def test_all_missing_effort_returns_empty_result(self):
+        df = pd.DataFrame({
+            'date': pd.to_datetime(['2026-06-01']),
+            'effort': [pd.NA],
+            'category': ['Rest'],
+        })
+        assert compute_acwr(df).empty
+
+
+class TestGetPeakSessions:
+
+    @pytest.fixture
+    def sample_sessions(self):
+        return pd.DataFrame({
+            'date': pd.to_datetime(['2026-07-01', '2026-07-02', '2026-07-03', '2026-07-04', '2026-07-05']),
+            'category': ['Strength', 'Rest', 'Technique', 'Free', 'Strength'],
+            'effort': [8, None, 6, 9, 5],
+            'gym_numeric': [3, -1, 5, -1, 2],
+            'moonboard_numeric': [-1, -1, -1, 8, -1],
+        })
+
+    def test_rest_days_are_excluded(self, sample_sessions):
+        top = get_peak_sessions(sample_sessions, n=3)
+        assert 'Rest' not in top['category'].values
+
+    def test_highest_grade_session_ranks_first(self, sample_sessions):
+        top = get_peak_sessions(sample_sessions, n=3)
+        assert top.iloc[0]['date'] == pd.Timestamp('2026-07-04')
+
+    def test_returns_requested_count(self, sample_sessions):
+        assert len(get_peak_sessions(sample_sessions, n=3)) == 3
+
+    def test_fewer_sessions_than_n_returns_available(self, sample_sessions):
+        assert len(get_peak_sessions(sample_sessions.iloc[:1], n=3)) == 1
+
+    def test_empty_dataframe_returns_empty_result(self, sample_sessions):
+        assert get_peak_sessions(sample_sessions.iloc[0:0], n=3).empty
