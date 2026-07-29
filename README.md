@@ -13,6 +13,7 @@ A personal climbing training dashboard built with **Streamlit**, backed by a **G
 
 - **📅 Training calendar** - sessions color-coded by category (Strength, Stamina, Technique, Free, Rest) on the calendar grid.
 - **✏️ Click-to-edit sessions** - click any logged day to edit effort, grades, or exercises, or click a blank day to log a missed session.
+- **🏋️ Exercise Library editor** - add, edit, or delete exercises in an Excel-like grid.
 - **📈 Analytics dashboard** - effort trend, gym/Moonboard grade progression, and training category distribution over any custom date range.
 - **📱 One-tap mobile logging** - two Android home screen widgets log a session or register a new exercise directly into the spreadsheet.
 - **🔄 Two-way sync with Google Sheets** - reads from and writes back to the same spreadsheet your Google Form feeds into, so no data ever lives in two places.
@@ -40,11 +41,14 @@ A personal climbing training dashboard built with **Streamlit**, backed by a **G
 
 ```
 .
-├── app.py                 # Streamlit dashboard (calendar + analytics)
-├── data_pipeline.py       # Google Sheets I/O and data cleaning logic
-├── Script.gs              # Apps Script Web App backend (mobile widget endpoint)
-├── requirements.txt       # Python dependencies
-└── credentials.json       # Google service account key (not committed - see setup)
+├── app.py                    # Streamlit dashboard (calendar + analytics)
+├── data_pipeline.py          # Google Sheets I/O and data cleaning logic
+├── Script.gs                 # Apps Script Web App backend (mobile widget endpoint)
+├── tests/
+│   └── test_data_pipeline.py # pytest suite for the validation/cleaning logic
+├── requirements.txt          # Python dependencies
+├── requirements-dev.txt      # Adds pytest, for running the test suite
+└── credentials.json          # Google service account key (not committed - see setup)
 ```
 
 ---
@@ -168,10 +172,17 @@ Every row fetched from either worksheet is validated (via [Pydantic](https://doc
 ## Roadmap
 
 - [x] Add [Pydantic](https://docs.pydantic.dev) models to validate row schemas coming from Google Sheets before they're processed.
-- [ ] Exercise Dictionary CRUD screen in the dashboard (`st.data_editor`).
-- [ ] Add automated tests for the data cleaning logic in `data_pipeline.py`.
+- [x] Exercise Dictionary CRUD screen in the dashboard (`st.data_editor`).
+- [x] Add automated tests for the data cleaning logic in `data_pipeline.py`.
 - [x] Change Google Form to android widget with google sheets Apps Script.
 - [x] Deploy to Streamlit Community Cloud.
+
+### Running the tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
 
 ---
 
