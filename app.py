@@ -1,7 +1,7 @@
 """
 Climbing Training Tracker - Streamlit dashboard.
 
-Reads cleaned session data from Google Sheets (via data_pipeline.py) and
+Reads cleaned session data from Supabase (via data_pipeline.py) and
 renders:
 - An interactive calendar for viewing/editing/adding training sessions.
 - An analytics section (effort trend, grade progression, category mix)
@@ -61,7 +61,7 @@ st.markdown("""
 @st.cache_data
 def fetch_data():
     """Cached wrapper around load_clean_data() so every rerun doesn't hit
-    the Google Sheets API. Cleared explicitly after any write (see the
+    Supabase. Cleared explicitly after any write (see the
     modal's save/delete/add actions below)."""
     return load_clean_data()
 
@@ -83,37 +83,7 @@ def edit_session_modal(session_data, is_new=False):
     """
     st.write(f"**Date:** {session_data['date'].strftime('%d/%m/%Y')}")
 
-    # 1. Initialize per-session widget state.
-    # We re-initialize whenever the modal is opened for a *different*
-    # session (different row or date) so stale exercise text from a
-    # previously edited session doesn't leak into this one.
-    if ("current_edit_row" not in st.session_state or
-        st.session_state.current_edit_row != session_data['gsheet_row'] or
-        st.session_state.get("current_edit_date") != session_data['date']):
-
-        st.session_state.current_edit_row = session_data['gsheet_row']
-        st.session_state.current_edit_date = session_data['date']
-        st.session_state.edit_exercises = "" if pd.isna(session_data['exercises']) else str(session_data['exercises'])
-
-    # 2. Callbacks for appending/removing exercises from the comma-separated list
-    def append_exercise():
-        ex = st.session_state.ex_selector
-        if ex:
-            if st.session_state.edit_exercises:
-                separator = " " if st.session_state.edit_exercises.strip().endswith(',') else ", "
-                st.session_state.edit_exercises += f"{separator}{ex}"
-            else:
-                st.session_state.edit_exercises = ex
-
-    def remove_exercise(ex_to_remove):
-        # Convert the current comma-separated text to a list, drop the
-        # item, and rejoin it back into the stored string.
-        current_list = [e.strip() for e in st.session_state.edit_exercises.split(',')] if st.session_state.edit_exercises else []
-        if ex_to_remove in current_list:
-            current_list.remove(ex_to_remove)
-            st.session_state.edit_exercises = ", ".join(current_list)
-
-    # 3. Form inputs
+    # 1. Form inputs
     if is_new:
         cat_opts = PipelineConfig.ALLOWED_CATEGORIES
         new_cat = st.selectbox("Category", cat_opts)
@@ -132,37 +102,23 @@ def edit_session_modal(session_data, is_new=False):
     current_mb = session_data['moonboard_grade'] if pd.notna(session_data['moonboard_grade']) and session_data['moonboard_grade'] in mb_opts else ""
     new_mb = st.selectbox("Max Moonboard Grade", mb_opts, index=mb_opts.index(current_mb))
 
-    # 4. Interactive exercises grid (click a logged exercise to remove it)
+    # 2. Exercises
     st.markdown("---")
-    st.markdown("**Exercises Logged (Click to remove):**")
+    current_text = "" if pd.isna(session_data['exercises']) else str(session_data['exercises'])
+    current_list = [ex.strip() for ex in current_text.split(',') if ex.strip()]
+    default_exercises = [ex for ex in current_list if ex in available_exercises]
 
-    current_text = st.session_state.edit_exercises
-    current_list = [ex.strip() for ex in current_text.split(',')] if current_text else []
-
-    if current_list and current_list[0] != "":
-        # 3-column wrapping grid; modulo creates the wrap-around effect
-        grid_cols = st.columns(3)
-        for i, ex in enumerate(current_list):
-            if ex:
-                with grid_cols[i % 3]:
-                    # args=(ex,) safely passes this specific exercise to the callback
-                    st.button(f"{ex} ✖", key=f"del_{i}_{ex}", on_click=remove_exercise, args=(ex,), use_container_width=True)
-    else:
-        st.info("No exercises logged for this session yet")
-
-    # Don't offer exercises that are already logged for this session
-    filtered_exercises = [ex for ex in available_exercises if ex not in current_list]
-
-    st.markdown("**(Optional) Append an exercise:**")
-    col_sel, col_btn = st.columns([3, 1])
-    with col_sel:
-        st.selectbox("Select Exercise", [""] + filtered_exercises, key="ex_selector", label_visibility="collapsed")
-    with col_btn:
-        st.button("➕ Add", on_click=append_exercise, use_container_width=True)
+    session_key = session_data['id'] if pd.notna(session_data['id']) else session_data['date'].strftime('%Y%m%d')
+    selected_exercises = st.multiselect(
+        "Exercises",
+        options=available_exercises,
+        default=default_exercises,
+        key=f"session_exercises_{session_key}",
+    )
 
     st.markdown("---")
 
-    # 5. Save & delete actions
+    # 3. Save & delete actions
     if is_new:
         if st.button("💾 Log New Session", use_container_width=True):
             new_session_data = {
@@ -171,7 +127,7 @@ def edit_session_modal(session_data, is_new=False):
                 'Effort Scale': new_effort,
                 'Max Gym Grade Color': new_gym,
                 'Max Moonboard Grade': new_mb,
-                'Exercises': st.session_state.edit_exercises
+                'Exercises': ", ".join(selected_exercises)
             }
             if add_session(new_session_data):
                 fetch_data.clear()
@@ -184,14 +140,14 @@ def edit_session_modal(session_data, is_new=False):
                     'Effort Scale': new_effort,
                     'Max Gym Grade Color': new_gym,
                     'Max Moonboard Grade': new_mb,
-                    'Exercises': st.session_state.edit_exercises
+                    'Exercises': ", ".join(selected_exercises)
                 }
-                if update_session(int(session_data['gsheet_row']), updated_data):
+                if update_session(int(session_data['id']), updated_data):
                     fetch_data.clear()
                     st.rerun()
         with col_del:
             if st.button("🗑️ Delete Session", use_container_width=True):
-                if delete_session(int(session_data['gsheet_row'])):
+                if delete_session(int(session_data['id'])):
                     fetch_data.clear()
                     st.rerun()
 
@@ -200,7 +156,7 @@ def _make_blank_session(clicked_date_str: str) -> pd.Series:
     """Build a synthetic empty session row for a day with no logged data,
     so the modal can be reused for both editing and creating sessions."""
     return pd.Series({
-        'gsheet_row': None,
+        'id': None,
         'date': pd.to_datetime(clicked_date_str),
         'category': '',
         'effort': pd.NA,
@@ -433,9 +389,9 @@ if len(date_range) == 2:
                 st.markdown(f"**{session['date'].strftime('%d/%m/%Y')}**")
                 st.caption(session['category'])
                 if session['gym_numeric'] != -1:
-                    st.write(f"🧗 Gym: {gym_rev_map.get(int(session['gym_numeric']), '—')}")
+                    st.write(f"🧗 Gym: {gym_rev_map.get(int(session['gym_numeric']), '-')}")
                 if session['moonboard_numeric'] != -1:
-                    st.write(f"🪨 Moonboard: {mb_rev_map.get(int(session['moonboard_numeric']), '—')}")
+                    st.write(f"🪨 Moonboard: {mb_rev_map.get(int(session['moonboard_numeric']), '-')}")
                 if pd.notna(session['effort']):
                     st.write(f"🔥 Effort: {int(session['effort'])}/10")
     else:
@@ -448,9 +404,9 @@ st.markdown("---")
 st.header("🏋️ Exercise Library")
 st.markdown("*Add, edit, or delete exercises here*")
 
-_dict_display_cols = [c for c in df_dict.columns if c != 'gsheet_row']
+_dict_display_cols = [c for c in df_dict.columns if c != 'id']
 df_dict_display = df_dict[_dict_display_cols].reset_index(drop=True)
-_row_lookup = df_dict.reset_index(drop=True)['gsheet_row'].to_dict() if 'gsheet_row' in df_dict.columns else {}
+_row_lookup = df_dict.reset_index(drop=True)['id'].to_dict() if 'id' in df_dict.columns else {}
 
 _editor_column_config = {}
 if 'type' in df_dict_display.columns:
@@ -466,12 +422,14 @@ edited_df = st.data_editor(
     column_config=_editor_column_config,
 )
 
-# Maps the editors internal field names to the sheets actual column headers
-_FIELD_TO_SHEET_COL = {
+# Maps the editor's internal field names to the
+# keys add_exercise/update_exercise expect.
+_FIELD_TO_DB_COL = {
     'name': 'Name',
     'type': 'Type',
     'sets': 'Sets',
-    'reps': 'Reps/Time',
+    'reps': 'Reps',
+    'time': 'Time',
     'rest': 'Rest',
     'comments': 'Comments',
     'phase': 'Phase',
@@ -483,33 +441,29 @@ if st.button("💾 Save Exercise Library Changes", use_container_width=True):
 
     # Edits to existing rows
     for idx_str, changed_fields in changes.get("edited_rows", {}).items():
-        gsheet_row = _row_lookup.get(int(idx_str))
-        if gsheet_row is None:
+        exercise_id = _row_lookup.get(int(idx_str))
+        if exercise_id is None:
             continue
         payload = {
-            _FIELD_TO_SHEET_COL[field]: value
+            _FIELD_TO_DB_COL[field]: value
             for field, value in changed_fields.items()
-            if field in _FIELD_TO_SHEET_COL
+            if field in _FIELD_TO_DB_COL
         }
         if payload:
-            update_exercise(int(gsheet_row), payload)
+            update_exercise(int(exercise_id), payload)
             any_change = True
 
     # Deletions
-    deleted_rows = sorted(
-        (_row_lookup[i] for i in changes.get("deleted_rows", []) if i in _row_lookup),
-        reverse=True
-    )
-    for gsheet_row in deleted_rows:
-        delete_exercise(int(gsheet_row))
+    for exercise_id in (_row_lookup[i] for i in changes.get("deleted_rows", []) if i in _row_lookup):
+        delete_exercise(int(exercise_id))
         any_change = True
 
     # New rows added at the bottom of the grid
     for new_row in changes.get("added_rows", []):
         payload = {
-            _FIELD_TO_SHEET_COL[field]: value
+            _FIELD_TO_DB_COL[field]: value
             for field, value in new_row.items()
-            if field in _FIELD_TO_SHEET_COL
+            if field in _FIELD_TO_DB_COL
         }
         if str(payload.get('Name') or '').strip():
             add_exercise(payload)
