@@ -71,7 +71,13 @@ df_past, df_future, df_dict = fetch_data()
 df_all_calendar = pd.concat([df_past, df_future]).dropna(subset=['date']).copy()
 df_all_calendar['date_str'] = df_all_calendar['date'].dt.strftime('%Y-%m-%d')
 
-available_exercises = df_dict['name'].dropna().unique().tolist() if 'name' in df_dict.columns else []
+# Group exercises by phase for the UI tabs
+if not df_dict.empty and 'phase' in df_dict.columns and 'name' in df_dict.columns:
+    exercises_before = df_dict[df_dict['phase'] == 'Before']['name'].dropna().unique().tolist()
+    exercises_during = df_dict[df_dict['phase'] == 'During']['name'].dropna().unique().tolist()
+    exercises_after = df_dict[df_dict['phase'] == 'After']['name'].dropna().unique().tolist()
+else:
+    exercises_before, exercises_during, exercises_after = [], [], []
 
 
 # --- EDIT/CREATE SESSION MODAL (POP-UP) ---
@@ -104,18 +110,56 @@ def edit_session_modal(session_data, is_new=False):
 
     # 2. Exercises
     st.markdown("---")
-    current_text = "" if pd.isna(session_data['exercises']) else str(session_data['exercises'])
-    current_list = [ex.strip() for ex in current_text.split(',') if ex.strip()]
-    default_exercises = [ex for ex in current_list if ex in available_exercises]
-
+    st.markdown("**Exercises**")
+    
     session_key = session_data['id'] if pd.notna(session_data['id']) else session_data['date'].strftime('%Y%m%d')
-    selected_exercises = st.multiselect(
-        "Exercises",
-        options=available_exercises,
-        default=default_exercises,
-        key=f"session_exercises_{session_key}",
-    )
 
+    # Determine default selections
+    if is_new:
+        # Smart State Injection: Fetch "Before" and "After" from the most recent past session
+        default_before = []
+        default_during = [] # Always start blank for climbing
+        default_after = []
+        
+        if not df_past.empty:
+            # Grab the absolute most recent session logged
+            latest_session = df_past.sort_values(by='date', ascending=False).iloc[0]
+            if pd.notna(latest_session['exercises']):
+                last_exercises = [ex.strip() for ex in str(latest_session['exercises']).split(',') if ex.strip()]
+                # Only inject the ones that belong to the Before or After phases
+                default_before = [ex for ex in last_exercises if ex in exercises_before]
+                default_after = [ex for ex in last_exercises if ex in exercises_after]
+    else:
+        # Editing an existing session: Load its specific exercises
+        current_text = "" if pd.isna(session_data['exercises']) else str(session_data['exercises'])
+        current_list = [ex.strip() for ex in current_text.split(',') if ex.strip()]
+        
+        default_before = [ex for ex in current_list if ex in exercises_before]
+        default_during = [ex for ex in current_list if ex in exercises_during]
+        default_after = [ex for ex in current_list if ex in exercises_after]
+
+    # Render Mobile Tabs
+    tab1, tab2, tab3 = st.tabs(["🏃 Warm-up", "🧗 Climbing", "🏋️ Cool-down"])
+    
+    with tab1:
+        selected_before = st.multiselect(
+            "Before", options=exercises_before, default=default_before, 
+            key=f"ex_before_{session_key}", label_visibility="collapsed"
+        )
+    with tab2:
+        selected_during = st.multiselect(
+            "During", options=exercises_during, default=default_during, 
+            key=f"ex_during_{session_key}", label_visibility="collapsed"
+        )
+    with tab3:
+        selected_after = st.multiselect(
+            "After", options=exercises_after, default=default_after, 
+            key=f"ex_after_{session_key}", label_visibility="collapsed"
+        )
+    
+    # Combine them all into a single list for the save function
+    selected_exercises = selected_before + selected_during + selected_after
+    
     st.markdown("---")
 
     # 3. Save & delete actions
