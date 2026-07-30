@@ -1,10 +1,12 @@
 /**
- * Web App backend for the Climbing Training Tracker
+ * Web App bridge between the Climbing Training Tracker's Android widgets
+ * and Supabase.
  *
- * Before deploying, set a secret token:
+ * Before deploying, set three secret Script Properties:
  *   Project Settings > Script Properties > Add property
- *     key:   API_TOKEN
- *     value: <a random string you generate once>
+ *     API_TOKEN     - same shared secret the widgets already send
+ *     SUPABASE_URL  - e.g. https://xxxxx.supabase.co
+ *     SUPABASE_KEY  - Supabase service_role key
  */
 
 function getApiToken_() {
@@ -18,7 +20,8 @@ function jsonResponse_(obj) {
 
 /**
  * Entry point for both widgets. Routes on ?action=log_session or
- * ?action=add_exercise.The token travels in the JSON body, not a header
+ * ?action=add_exercise. The API_TOKEN travels in the JSON body, not a
+ * header (Apps Script can't read custom request headers).
  */
 function doPost(e) {
   try {
@@ -52,58 +55,157 @@ function doGet(e) {
     return jsonResponse_({ success: false, error: 'Unauthorized' });
   }
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Exercise_Dictionary');
-  const data = sheet.getDataRange().getValues();
-  const names = data.slice(1)
-    .map(function (row) { return row[0]; })
-    .filter(function (name) { return name && name.toString().trim() !== ''; });
+  try {
+    const rows = supabaseRequest_('GET', 'exercise?select=name&order=name.asc', null);
+    const names = rows.map(function (r) { return r.name; });
+    return jsonResponse_({ success: true, exercises: names });
+  } catch (err) {
+    return jsonResponse_({ success: false, error: err.message });
+  }
+}
 
-  return jsonResponse_({ success: true, exercises: names });
+// ============================================================
+// Supabase REST helpers
+// ============================================================
+
+function supabaseHeaders_(extra) {
+  const key = PropertiesService.getScriptProperties().getProperty('SUPABASE_KEY');
+  const headers = {
+    'apikey': key,
+    'Authorization': 'Bearer ' + key,
+    'Content-Type': 'application/json'
+  };
+  for (const k in (extra || {})) {
+    headers[k] = extra[k];
+  }
+  return headers;
+}
+
+function supabaseUrl_(path) {
+  const base = PropertiesService.getScriptProperties().getProperty('SUPABASE_URL');
+  return base.replace(/\/$/, '') + '/rest/v1/' + path;
 }
 
 /**
- * Appends one row to Main_Log. Column order matches COL_MAPPING and
- * DICT_COLUMN_NAMES in data_pipeline.py
+ * One helper for every Supabase REST call. Throws on any 4xx/5xx so
+ * callers don't have to check response codes themselves - doPost's
+ * try/catch turns that into a normal { success: false, error } reply.
+ */
+function supabaseRequest_(method, path, payload, extraHeaders) {
+  const options = {
+    method: method,
+    headers: supabaseHeaders_(extraHeaders),
+    muteHttpExceptions: true
+  };
+  if (payload !== undefined && payload !== null) {
+    options.payload = JSON.stringify(payload);
+  }
+
+  const response = UrlFetchApp.fetch(supabaseUrl_(path), options);
+  const code = response.getResponseCode();
+  const text = response.getContentText();
+
+  if (code >= 400) {
+    throw new Error('Supabase ' + method + ' ' + path + ' failed (' + code + '): ' + text);
+  }
+  return text ? JSON.parse(text) : null;
+}
+
+/** Converts the widget's DD/MM/YYYY date string to Postgres' ISO format. */
+function ddmmyyyyToIso_(dateStr) {
+  if (!dateStr) return null;
+  const parts = dateStr.split('/');
+  if (parts.length !== 3) return null;
+  const dd = parts[0].padStart(2, '0');
+  const mm = parts[1].padStart(2, '0');
+  const yyyy = parts[2];
+  return yyyy + '-' + mm + '-' + dd;
+}
+
+// ============================================================
+// Actions
+// ============================================================
+
+/**
+ * Inserts one row into climbing_training, then links any named exercises
+ * via training_exercises
  *
  * Expected body fields:
  *   date          "DD/MM/YYYY"
  *   category      "Strength" | "Stamina" | "Technique" | "Free" | "Rest"
  *   effort        number 1-10
- *   gym_grade     e.g. "Blue"   (must match PipelineConfig.GYM_MAPPING keys)
- *   moonboard_grade  e.g. "V4" (must match PipelineConfig.MOONBOARD_MAPPING keys)
+ *   gym_grade     e.g. "Blue"
+ *   moonboard_grade  e.g. "V4"
  *   injured       boolean
  *   exercises     comma-separated string, e.g. "Pull-ups, Hangboard"
  */
 function logSession_(body) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Main_Log');
+  const isoDate = ddmmyyyyToIso_(body.date);
+  if (!isoDate) {
+    return jsonResponse_({ success: false, error: 'Invalid or missing date: ' + body.date });
+  }
 
-  const timestamp = Utilities.formatDate(
-    new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm:ss'
-  );
+  const sessionRow = {
+    date_entry: new Date().toISOString(),
+    date: isoDate,
+    category: body.category || null,
+    effort: (body.effort === undefined || body.effort === '') ? null : Number(body.effort),
+    gym_grade: body.gym_grade || null,
+    moonboard_grade: body.moonboard_grade || null,
+    injured: !!body.injured
+  };
 
-  sheet.appendRow([
-    timestamp,                       // Carimbo de data/hora
-    body.date || '',                 // Date
-    body.category || '',             // Category
-    body.effort || '',               // Effort Scale
-    body.gym_grade || '',            // Max Gym Grade Color
-    body.moonboard_grade || '',      // Max Moonboard Grade
-    body.injured ? 'Yes' : 'No',     // Injuries / Tweaks
-    body.exercises || ''             // Exercises
-  ]);
+  const inserted = supabaseRequest_('POST', 'climbing_training', sessionRow, { 'Prefer': 'return=representation' });
+  if (!inserted || !inserted.length) {
+    return jsonResponse_({ success: false, error: 'Session insert returned no data - check the SUPABASE_KEY is a service_role key.' });
+  }
+  const sessionId = inserted[0].id;
 
-  return jsonResponse_({ success: true });
+  const unmatched = linkExercises_(sessionId, body.exercises);
+
+  return jsonResponse_({ success: true, id: sessionId, unmatched_exercises: unmatched });
 }
 
 /**
- * Appends one row to Exercise_Dictionary.
+ * Looks up each comma-separated exercise name against the exercise table
+ * and creates the matching training_exercises links. Names that don't
+ * match anything are skipped and returned, not silently dropped
+ */
+function linkExercises_(sessionId, exercisesStr) {
+  if (!exercisesStr) return [];
+
+  const names = exercisesStr.split(',')
+    .map(function (n) { return n.trim(); })
+    .filter(function (n) { return n; });
+  if (!names.length) return [];
+
+  const inList = names.map(encodeURIComponent).join(',');
+  const matches = supabaseRequest_('GET', 'exercise?select=id,name&name=in.(' + inList + ')', null);
+
+  const nameToId = {};
+  matches.forEach(function (row) { nameToId[row.name] = row.id; });
+
+  const unmatched = names.filter(function (n) { return !(n in nameToId); });
+  const junctionRows = names
+    .filter(function (n) { return n in nameToId; })
+    .map(function (n) { return { training_id: sessionId, exercise_id: nameToId[n] }; });
+
+  if (junctionRows.length) {
+    supabaseRequest_('POST', 'training_exercises', junctionRows, { 'Prefer': 'return=minimal' });
+  }
+  return unmatched;
+}
+
+/**
+ * Inserts one row into the exercise table.
  *
  * Expected body fields:
  *   name       required
- *   type       either "Reps" | "Time"
+ *   type       "Reps" | "Time"
  *   sets       number of sets
- *   reps       reps or duration, e.g. "12" or "00:15" (mm:ss)
- *   rest       number in minutes
+ *   reps       number of reps (only meaningful when type is "Reps")
+ *   time       duration string, e.g. "00:15" (only meaningful when type is "Time")
+ *   rest       number
  *   comments   free text, optional
  *   phase      "Before" | "During" | "After"
  */
@@ -112,17 +214,17 @@ function addExercise_(body) {
     return jsonResponse_({ success: false, error: 'Exercise name is required' });
   }
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Exercise_Dictionary');
+  const exerciseRow = {
+    name: body.name,
+    type: body.type || null,
+    sets: (body.sets === undefined || body.sets === '') ? null : Number(body.sets),
+    reps: (body.reps === undefined || body.reps === '') ? null : Number(body.reps),
+    time: body.time || null,
+    rest: (body.rest === undefined || body.rest === '') ? null : Number(body.rest),
+    comments: body.comments || null,
+    phase: body.phase || null
+  };
 
-  sheet.appendRow([
-    body.name,
-    body.type || '',
-    body.sets || '',
-    body.reps || '',
-    body.rest || '',
-    body.comments || '',
-    body.phase || ''
-  ]);
-
+  supabaseRequest_('POST', 'exercise', exerciseRow, { 'Prefer': 'return=minimal' });
   return jsonResponse_({ success: true });
 }
