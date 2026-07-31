@@ -1,42 +1,53 @@
 # 🧗 Climbing Training Tracker
 
-A personal climbing training dashboard built with **Streamlit**, backed by a **Google Form + Google Sheets** logging workflow. Log training sessions from your phone via a pair of custom Android home screen widgets, then review progress, edit past sessions, and explore analytics in an interactive web dashboard.
+A personal climbing training dashboard built with **Streamlit** and backed by **Supabase (Postgres)**. Log a session in seconds from an Android home screen widget, or from the dashboard itself. Review progress, catch up on anything you forgot to log, and dig into sports-science-grade analytics like training load trend and peak-session highlights.
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue
 )
 ![Streamlit](https://img.shields.io/badge/built%20with-Streamlit-FF4B4B)
+![Supabase](https://img.shields.io/badge/database-Supabase-3ECF8E)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 ---
 
 ## Features
 
-- **📅 Training calendar** - sessions color-coded by category (Strength, Stamina, Technique, Free, Rest) on the calendar grid.
-- **✏️ Click-to-edit sessions** - click any logged day to edit effort, grades, or exercises, or click a blank day to log a missed session.
-- **🏋️ Exercise Library editor** - add, edit, or delete exercises in an Excel-like grid.
-- **📈 Analytics dashboard** - effort trend, gym/Moonboard grade progression, and training category distribution over any custom date range.
-- **📉 Training load tracking** - Acute:Chronic Workload Ratio (ACWR) chart flags whether recent training load is in a sustainable range or ramping into higher-injury-risk territory.
-- **🎯 Effort vs. Grade** - scatterplot relating perceived effort to the grades actually achieved, gym and Moonboard.
-- **🏆 Peak Performance Highlights** - surfaces top 3 strongest sessions in any selected date range.
-- **📱 One-tap mobile logging** - two Android home screen widgets log a session or register a new exercise directly into the spreadsheet.
-- **🔄 Two-way sync with Google Sheets** - reads from and writes back to the same spreadsheet your Google Form feeds into, so no data ever lives in two places.
+**Logging**
+- **One-tap mobile logging** - two Android home screen widgets log a session or register a new exercise.
+- **Click-to-edit sessions** - click any day on the calendar to edit or log a missed session.
+- **Before / During / After exercise phasing** - warm-up, climbing, and cool-down exercises live in their own tabs within each session, pulled from Exercise Library.
+- **Smart defaults** - logging a new session pre-fills the usual warm-up and cool-down from the most recent session.
+- **Catch-up carousel** - on load, any past session that never got its effort filled in pops up automatically.
+
+**Exercise Library**
+- Browse exercises grouped by phase; click one to edit or delete it.
+- A dedicated "Add Exercise" modal checks for an existing name before creating a duplicate.
+
+**Analytics**
+- Color-coded training calendar (Strength / Stamina / Technique / Free / Rest).
+- Effort trend and gym/Moonboard grade progression over a custom date range.
+- **Acute:Chronic Workload Ratio (ACWR)** - flags whether recent training load is in a sustainable range or ramping into higher-injury-risk territory.
+- **Effort vs. Grade Yield** - relates perceived effort to the grades actually achieved.
+- **Peak Performance Highlights** - the top 3 strongest sessions in any selected range.
 
 ---
 
 ## Data Architecture
-📱 **Android widgets** (HTTP Request Shortcuts) ➔ ⚙️ **Google Apps Script** (Web App) ➔ 🗄️ **Google Sheets** (Relational DB) ➔ 🐍 **Pandas/gspread** (Data Pipeline) ➔ 📊 **Streamlit** (Web UI)
+
+📱 **Android widgets** (HTTP Request Shortcuts) ➔ ⚙️ **Google Apps Script** (bridge) ➔ 🗄️ **Supabase** (Postgres) ➔ 🐍 **Pandas + Pydantic** (validation & cleaning) ➔ 📊 **Streamlit** (dashboard)
 
 ---
 
 ## Tech Stack
 
-| Layer            | Tool                                              |
-|-------------------|----------------------------------------------------|
-| Dashboard / UI    | [Streamlit](https://streamlit.io) + [streamlit-calendar](https://github.com/im-perativa/streamlit-calendar) |
-| Data processing   | pandas, numpy                                     |
-| Charts            | matplotlib, seaborn                               |
-| Mobile data entry    | [HTTP Request Shortcuts](https://http-shortcuts.rmy.ch) (Android) → Google Apps Script Web App |
-| Data source       | Google Forms + Google Sheets (via [gspread](https://docs.gspread.org)) |
+| Layer                   | Tool                                                                                                        |
+|-------------------------|-------------------------------------------------------------------------------------------------------------|
+| Dashboard / UI          | [Streamlit](https://streamlit.io) + [streamlit-calendar](https://github.com/im-perativa/streamlit-calendar) |
+| Data validation         | [Pydantic](https://docs.pydantic.dev)                                                                       |
+| Data processing         | pandas, numpy                                                                                               |
+| Charts                  | matplotlib, seaborn                                                                                         |
+| Database                | [Supabase](https://supabase.com) (Postgres) via [supabase-py](https://github.com/supabase/supabase-py)      |
+| Mobile data entry       | [HTTP Request Shortcuts](https://http-shortcuts.rmy.ch) (Android) → Google Apps Script → Supabase REST API  |
 
 ---
 
@@ -44,14 +55,14 @@ A personal climbing training dashboard built with **Streamlit**, backed by a **G
 
 ```
 .
-├── app.py                    # Streamlit dashboard (calendar + analytics)
-├── data_pipeline.py          # Google Sheets I/O and data cleaning logic
-├── Script.gs                 # Apps Script Web App backend (mobile widget endpoint)
+├── app.py                     # Streamlit dashboard: calendar, exercise library, analytics
+├── data_pipeline.py           # Supabase I/O, Pydantic validation, data cleaning, and analytics functions
+├── Script.gs                  # Apps Script bridge: mobile widgets → Supabase REST API
 ├── tests/
-│   └── test_data_pipeline.py # pytest suite for the validation/cleaning logic
-├── requirements.txt          # Python dependencies
-├── requirements-dev.txt      # Adds pytest, for running the test suite
-└── credentials.json          # Google service account key (not committed - see setup)
+│   └── test_data_pipeline.py  # pytest suite for validation, cleaning, and analytics logic
+├── requirements.txt           # Python dependencies
+├── requirements-dev.txt       # Adds pytest, for running the test suite
+└── .env                       # Local Supabase credentials
 ```
 
 ---
@@ -59,9 +70,8 @@ A personal climbing training dashboard built with **Streamlit**, backed by a **G
 ## Prerequisites
 
 - Python 3.10+
-- A Google account
-- A Google Sheet with `Main_Log` and `Exercise_Dictionary` worksheets Sheet already set up (see [Spreadsheet Setup](#spreadsheet-setup) below if you're starting from scratch)
-- An Android phone with [HTTP Request Shortcuts](https://http-shortcuts.rmy.ch) installed (only needed if you want to log sessions from your phone, rather than through the dashboard's own edit modal)
+- A free [Supabase](https://supabase.com) account
+- An Android phone with [HTTP Request Shortcuts](https://http-shortcuts.rmy.ch) installed (only needed for mobile logging - the dashboard's own modals work standalone)
 
 ---
 
@@ -83,26 +93,29 @@ source venv/bin/activate      # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 3. Set up Google API credentials
+### 3. Provision the database
 
-The app authenticates to Google Sheets using a **service account**, not your personal Google login.
+1. Create a new project at [supabase.com](https://supabase.com) (the free tier is plenty for personal use).
+2. Open the **SQL Editor** and run the schema below (also see [Database Schema](#database-schema) for what each column means).
+3. Go to **Connect** and note your **`NEXT_PUBLIC_SUPABASE_URL`** and **`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` key**.
 
-1. Go to the [Google Cloud Console](https://console.cloud.google.com/) and create a new project (or reuse an existing one).
-2. Enable the **Google Sheets API** and **Google Drive API** for that project.
-3. Go to **APIs & Services → Credentials → Create Credentials → Service Account**.
-4. Once created, open the service account, go to **Keys → Add Key → Create new key → JSON**, and download it.
-5. Rename the downloaded file to `credentials.json` and place it in the project root.
-6. Open your Google Sheet, click **Share**, and give the service account's email address (found inside `credentials.json`, field `client_email`) **Editor** access.
+### 4. Configure credentials
 
-> ⚠️ `credentials.json` contains a private key. Never commit it to version control - it's already excluded via `.gitignore`.
+**Local development** - create a `.env` file in the project root:
 
-### 4. Configure the spreadsheet name
+```
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-supabase-key
+```
 
-By default, the app looks for a spreadsheet named `Climbing Tracker`. If yours is named differently, update `SPREADSHEET_NAME` in `data_pipeline.py`:
+> ⚠️ `.env` contains a real credential. Never commit it.
 
-```python
-class PipelineConfig:
-    SPREADSHEET_NAME = 'Climbing Tracker'
+**Streamlit Community Cloud** - in the app's **Advanced Settings → Secrets**, add:
+
+```toml
+[supabase]
+url = "https://your-project.supabase.co"
+key = "your-service-role-key"
 ```
 
 ### 5. Run the app
@@ -111,81 +124,80 @@ class PipelineConfig:
 streamlit run app.py
 ```
 
-The dashboard will open automatically in your browser at `http://localhost:8501`.
+The dashboard opens automatically at `http://localhost:8501`.
 
-### 6. Cloud Deployment (Streamlit Community Cloud)
-To deploy this dashboard live:
-1. Push your code to a public GitHub repository (ensuring `credentials.json` is git-ignored).
-2. Connect the repository to Streamlit Community Cloud.
-3. In the Streamlit deployment **Advanced Settings**, paste the contents of your `credentials.json` into the Secrets manager under a `[gcp_service_account]` header.
+### 6. Set up mobile logging (optional)
 
-### 7. Set up mobile logging (optional)
- 
-Sessions and new exercises can be logged from an Android home screen instead of through the dashboard, using `Script.gs` as a small JSON API in front of the spreadsheet.
- 
-1. Open your Google Sheet, go to **Extensions → Apps Script**, and paste in the contents of `Script.gs`.
-2. Under **Project Settings → Script Properties**, add a property named `API_TOKEN` with a long random string as its value - this is the shared secret the widgets will send to authenticate.
-3. Deploy via **Deploy → New deployment → Web app**, with **Execute as: Me** and **Who has access: Anyone**, then copy the deployment URL.
-4. In the [HTTP Request Shortcuts](https://http-shortcuts.rmy.ch) app, create two shortcuts pointed at that URL:
+Sessions and new exercises can be logged from an Android home screen instead of through the dashboard, using `Script.gs` as a small bridge between the widgets and Supabase's REST API.
+
+1. In Supabase, go to **Connect** and copy your Project URL and key (same ones from step 3).
+2. Create a new Google Sheet (used only to host the Apps Script), go to **Extensions → Apps Script**, and paste in the contents of `Script.gs`.
+3. Under **Project Settings → Script Properties**, add three properties:
+   - `API_TOKEN` - a long random string you generate once; this is the shared secret the widgets send to authenticate.
+   - `SUPABASE_URL` - your Supabase Project URL.
+   - `SUPABASE_KEY` - your Supabase key.
+4. Deploy via **Deploy → New deployment → Web app**, with **Execute as: Me** and **Who has access: Anyone**, then copy the deployment URL.
+5. In [HTTP Request Shortcuts](https://http-shortcuts.rmy.ch), create two shortcuts pointed at that URL:
    - **Log Session** → POST to `<deployment-url>?action=log_session`
    - **Add Exercise** → POST to `<deployment-url>?action=add_exercise`
-   Each shortcut sends a JSON body with the relevant fields (see the docstrings in `Script.gs` for the exact fields each action expects) plus the `token` value from step 2.
-5. Add both shortcuts to your home screen as widgets.
-> ⚠️ Because Apps Script web apps can't read custom request headers, access control relies entirely on the `API_TOKEN` value inside the JSON body - keep it private, and treat the deployment URL as a secret.
- 
----
 
-## Spreadsheet Setup
+   Each shortcut sends a JSON body with the relevant fields (see the docstrings in `Script.gs` for exactly what each action expects) plus the `token` value from step 3.
+6. Add both shortcuts to your home screen as widgets.
 
-The app expects your Google Sheet to contain two worksheets:
-
-### `Main_Log`
-Populated by your Google Form responses (one row per submitted session). Expected columns:
-
-| Column                    | Description                                    |
-|---------------------------|------------------------------------------------|
-| `Carimbo de data/hora`    | Form submission timestamp (auto-filled)        |
-| `Date`                    | Date of the training session (DD/MM/YYYY)      |
-| `Category`                | Strength / Stamina / Technique / Free / Rest   |
-| `Effort Scale`            | Perceived effort, 1-10                         |
-| `Max Gym Grade Color`     | Highest gym grade climbed (color scale)        |
-| `Max Moonboard Grade`     | Highest Moonboard grade climbed (V-scale)      |
-| `Injuries / Tweaks`       | Yes / No                                       |
-| `Exercises`               | Comma-separated list of exercises performed    |
-
-### `Exercise_Dictionary`
-Populated by the **Add Exercise** widget. A reference table of exercises available for selection in the dashboard's "Add exercise" dropdown. Expected columns:
-
-| Column       | Description                        |
-|---------------|--------------------------------------|
-| `Name`         | Exercise name                       |
-| `Type`         | Reps/Time                           |
-| `Sets`         | How many Sets                       |
-| `Reps/Time`    | Number of reps or time (mm:ss)      |
-| `Rest`         | Number in minutes                   |
-| `Comments`     | Use "-" for no comments             |
-| `Phase`        | Before / During / After             |
-
-### Data validation
-
-Every row fetched from either worksheet is validated (via [Pydantic](https://docs.pydantic.dev)) before it reaches the dashboard - wrong types, typo'd grades/categories, or a missing date get that row skipped rather than crashing the app.
+> ⚠️ Apps Script web apps can't read custom request headers, so access control relies entirely on the `API_TOKEN` value inside the JSON body - keep it private, and treat the deployment URL as a secret.
 
 ---
 
-## Roadmap
+## Database Schema
 
-- [x] Add [Pydantic](https://docs.pydantic.dev) models to validate row schemas coming from Google Sheets before they're processed.
-- [x] Exercise Dictionary CRUD screen in the dashboard (`st.data_editor`).
-- [x] Add automated tests for the data cleaning logic in `data_pipeline.py`.
-- [x] Change Google Form to android widget with google sheets Apps Script.
-- [x] Deploy to Streamlit Community Cloud.
+Three tables - a session can reference any number of exercises without repeating data.
 
-### Running the tests
+```sql
+-- Reference table of exercises
+CREATE TABLE exercise (
+    id BIGINT PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY,
+    name TEXT UNIQUE NOT NULL,
+    type TEXT,            -- 'Reps' | 'Time'
+    sets INTEGER,
+    reps INTEGER,         -- set when type = 'Reps'
+    time TEXT,            -- set when type = 'Time', e.g. '00:15'
+    rest INTEGER,
+    comments TEXT,
+    phase TEXT            -- 'Before' | 'During' | 'After'
+);
+
+-- One row per logged (or scheduled) training session
+CREATE TABLE climbing_training (
+    id BIGINT PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY,
+    date_entry TIMESTAMP,
+    date DATE NOT NULL,
+    category TEXT,        -- 'Strength' | 'Stamina' | 'Technique' | 'Free' | 'Rest'
+    effort INTEGER,        -- 1-10, blank until the session is actually logged
+    gym_grade TEXT,
+    moonboard_grade TEXT,
+    injured BOOLEAN DEFAULT FALSE
+);
+
+-- Many-to-many: which exercises belong to which session
+CREATE TABLE training_exercises (
+    training_id BIGINT REFERENCES climbing_training(id) ON DELETE CASCADE,
+    exercise_id BIGINT REFERENCES exercise(id) ON DELETE CASCADE,
+    PRIMARY KEY (training_id, exercise_id)
+);
+```
+
+Every row fetched from Supabase is validated with [Pydantic](https://docs.pydantic.dev) before it reaches the dashboard. Validation is enforced at the application layer.
+
+---
+
+## Testing
 
 ```bash
 pip install -r requirements-dev.txt
 pytest
 ```
+
+Covers row validation (valid and deliberately invalid rows for both tables), the past/future session split, and the analytics functions (`compute_acwr`, `get_peak_sessions`) against hand-built edge cases.
 
 ---
 
