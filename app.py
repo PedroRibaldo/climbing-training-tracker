@@ -81,11 +81,14 @@ else:
 
 
 # --- EDIT/CREATE SESSION MODAL (POP-UP) ---
-@st.dialog("✏️ Session Details")
-def edit_session_modal(session_data, is_new=False):
-    """Pop-up form for viewing/editing an existing session, or logging a
-    new one when is_new=True. session_data is a single row (Series) from
-    df_all_calendar for edits, or a synthetic blank row for new entries.
+def _render_session_edit_form(session_data, is_new=False, on_saved=None):
+    """Renders the actual session form (fields + save/delete buttons).
+
+    Shared by edit_session_modal() (opened from a calendar click) and
+    due_sessions_carousel() (auto-opened on load for overdue sessions)
+
+    on_saved: called instead of the default fetch_data.clear()+st.rerun()
+    after a successful save/delete
     """
     st.write(f"**Date:** {session_data['date'].strftime('%d/%m/%Y')}")
 
@@ -111,7 +114,7 @@ def edit_session_modal(session_data, is_new=False):
     # 2. Exercises
     st.markdown("---")
     st.markdown("**Exercises**")
-    
+
     session_key = session_data['id'] if pd.notna(session_data['id']) else session_data['date'].strftime('%Y%m%d')
 
     # Determine default selections
@@ -120,7 +123,7 @@ def edit_session_modal(session_data, is_new=False):
         default_before = []
         default_during = [] # Always start blank for climbing
         default_after = []
-        
+
         if not df_past.empty:
             # Grab the absolute most recent session logged
             latest_session = df_past.sort_values(by='date', ascending=False).iloc[0]
@@ -133,34 +136,41 @@ def edit_session_modal(session_data, is_new=False):
         # Editing an existing session: Load its specific exercises
         current_text = "" if pd.isna(session_data['exercises']) else str(session_data['exercises'])
         current_list = [ex.strip() for ex in current_text.split(',') if ex.strip()]
-        
+
         default_before = [ex for ex in current_list if ex in exercises_before]
         default_during = [ex for ex in current_list if ex in exercises_during]
         default_after = [ex for ex in current_list if ex in exercises_after]
 
     # Render Mobile Tabs
     tab1, tab2, tab3 = st.tabs(["🏃 Warm-up", "🧗 Climbing", "🏋️ Cool-down"])
-    
+
     with tab1:
         selected_before = st.multiselect(
-            "Before", options=exercises_before, default=default_before, 
+            "Before", options=exercises_before, default=default_before,
             key=f"ex_before_{session_key}", label_visibility="collapsed"
         )
     with tab2:
         selected_during = st.multiselect(
-            "During", options=exercises_during, default=default_during, 
+            "During", options=exercises_during, default=default_during,
             key=f"ex_during_{session_key}", label_visibility="collapsed"
         )
     with tab3:
         selected_after = st.multiselect(
-            "After", options=exercises_after, default=default_after, 
+            "After", options=exercises_after, default=default_after,
             key=f"ex_after_{session_key}", label_visibility="collapsed"
         )
-    
+
     # Combine them all into a single list for the save function
     selected_exercises = selected_before + selected_during + selected_after
-    
+
     st.markdown("---")
+
+    def _finish():
+        fetch_data.clear()
+        if on_saved:
+            on_saved()
+        else:
+            st.rerun()
 
     # 3. Save & delete actions
     if is_new:
@@ -174,8 +184,7 @@ def edit_session_modal(session_data, is_new=False):
                 'Exercises': ", ".join(selected_exercises)
             }
             if add_session(new_session_data):
-                fetch_data.clear()
-                st.rerun()
+                _finish()
     else:
         col_save, col_del = st.columns(2)
         with col_save:
@@ -187,13 +196,65 @@ def edit_session_modal(session_data, is_new=False):
                     'Exercises': ", ".join(selected_exercises)
                 }
                 if update_session(int(session_data['id']), updated_data):
-                    fetch_data.clear()
-                    st.rerun()
+                    _finish()
         with col_del:
             if st.button("🗑️ Delete Session", use_container_width=True):
                 if delete_session(int(session_data['id'])):
-                    fetch_data.clear()
-                    st.rerun()
+                    _finish()
+
+
+@st.dialog("✏️ Session Details")
+def edit_session_modal(session_data, is_new=False):
+    """Pop-up form for viewing/editing an existing session, or logging a
+    new one when is_new=True
+    """
+    _render_session_edit_form(session_data, is_new=is_new)
+
+
+def _advance_due_carousel():
+    """Moves the due-sessions carousel to the next entry"""
+    st.session_state.due_carousel_index += 1
+    st.rerun()
+
+
+@st.dialog("⏰ Catch Up on Missed Sessions")
+def due_sessions_carousel():
+    """Auto-opened on page load when past sessions have no effort logged.
+    Saving, deleting, or skipping the current one all advance
+    to the next; running out of the queue closes the dialog.
+    """
+    queue = st.session_state.due_sessions_queue
+    idx = st.session_state.due_carousel_index
+
+    if idx >= len(queue):
+        return  # queue exhausted - nothing left to show, dialog closes
+
+    session_id = queue[idx]
+    matches = df_all_calendar[df_all_calendar['id'] == session_id]
+    if matches.empty:
+        # Edited/deleted by some other path since the queue was built
+        _advance_due_carousel()
+        return
+    session_data = matches.iloc[0]
+
+    col_prev, col_mid, col_next = st.columns([1, 3, 1])
+    with col_prev:
+        if st.button("◀", disabled=(idx == 0), use_container_width=True, key="due_carousel_prev"):
+            st.session_state.due_carousel_index -= 1
+            st.rerun()
+    with col_mid:
+        st.markdown(f"<p style='text-align:center'>Overdue session {idx + 1} of {len(queue)}</p>", unsafe_allow_html=True)
+    with col_next:
+        if st.button("▶", disabled=(idx == len(queue) - 1), use_container_width=True, key="due_carousel_next"):
+            st.session_state.due_carousel_index += 1
+            st.rerun()
+
+    st.warning("This session is missing its effort - fill it in, delete it, or skip it for now.")
+
+    _render_session_edit_form(session_data, is_new=False, on_saved=_advance_due_carousel)
+
+    if st.button("✖️ Skip for now", use_container_width=True, key="due_carousel_skip"):
+        _advance_due_carousel()
 
 
 def _make_blank_session(clicked_date_str: str) -> pd.Series:
@@ -208,6 +269,22 @@ def _make_blank_session(clicked_date_str: str) -> pd.Series:
         'moonboard_grade': np.nan,
         'exercises': ''
     })
+
+
+# --- CATCH UP ON DUE SESSIONS (runs once per browser session) ---
+# "Due" = a past session with no effort logged, i.e. it was scheduled but
+# never followed up on. Rest days are excluded
+if "due_sessions_checked" not in st.session_state:
+    st.session_state.due_sessions_checked = True
+    due_mask = df_past['effort'].isna() & (df_past['category'] != 'Rest')
+    due_df = df_past[due_mask].sort_values(by='date', ascending=False)
+    st.session_state.due_sessions_queue = due_df['id'].tolist()
+    st.session_state.due_carousel_index = 0
+
+# Re-checked on every rerun (not just the first). A dialog only stays visually open if the
+# script re-invokes its function on the following rerun
+if st.session_state.due_carousel_index < len(st.session_state.get("due_sessions_queue", [])):
+    due_sessions_carousel()
 
 
 # --- INTERACTIVE CALENDAR ---
@@ -443,78 +520,152 @@ if len(date_range) == 2:
 else:
     st.warning("Please select an end date to view analytics.")
 
-# --- EXERCISE LIBRARY (CRUD) ---
+# --- EXERCISE LIBRARY ---
 st.markdown("---")
 st.header("🏋️ Exercise Library")
-st.markdown("*Add, edit, or delete exercises here*")
+st.markdown("*Click any exercise below to edit or delete it.*")
 
-_dict_display_cols = [c for c in df_dict.columns if c != 'id']
-df_dict_display = df_dict[_dict_display_cols].reset_index(drop=True)
-_row_lookup = df_dict.reset_index(drop=True)['id'].to_dict() if 'id' in df_dict.columns else {}
 
-_editor_column_config = {}
-if 'type' in df_dict_display.columns:
-    _editor_column_config['type'] = st.column_config.SelectboxColumn("Type", options=PipelineConfig.ALLOWED_EXERCISE_TYPES)
-if 'phase' in df_dict_display.columns:
-    _editor_column_config['phase'] = st.column_config.SelectboxColumn("Phase", options=PipelineConfig.ALLOWED_PHASES)
+@st.dialog("➕ New Exercise")
+def add_exercise_modal():
+    new_name = st.text_input("Name")
 
-edited_df = st.data_editor(
-    df_dict_display,
-    num_rows="dynamic",
-    use_container_width=True,
-    key="exercise_editor",
-    column_config=_editor_column_config,
-)
+    type_opts = PipelineConfig.ALLOWED_EXERCISE_TYPES
+    new_type = st.selectbox("Type", type_opts)
 
-# Maps the editor's internal field names to the
-# keys add_exercise/update_exercise expect.
-_FIELD_TO_DB_COL = {
-    'name': 'Name',
-    'type': 'Type',
-    'sets': 'Sets',
-    'reps': 'Reps',
-    'time': 'Time',
-    'rest': 'Rest',
-    'comments': 'Comments',
-    'phase': 'Phase',
-}
-
-if st.button("💾 Save Exercise Library Changes", use_container_width=True):
-    changes = st.session_state.get("exercise_editor", {})
-    any_change = False
-
-    # Edits to existing rows
-    for idx_str, changed_fields in changes.get("edited_rows", {}).items():
-        exercise_id = _row_lookup.get(int(idx_str))
-        if exercise_id is None:
-            continue
-        payload = {
-            _FIELD_TO_DB_COL[field]: value
-            for field, value in changed_fields.items()
-            if field in _FIELD_TO_DB_COL
-        }
-        if payload:
-            update_exercise(int(exercise_id), payload)
-            any_change = True
-
-    # Deletions
-    for exercise_id in (_row_lookup[i] for i in changes.get("deleted_rows", []) if i in _row_lookup):
-        delete_exercise(int(exercise_id))
-        any_change = True
-
-    # New rows added at the bottom of the grid
-    for new_row in changes.get("added_rows", []):
-        payload = {
-            _FIELD_TO_DB_COL[field]: value
-            for field, value in new_row.items()
-            if field in _FIELD_TO_DB_COL
-        }
-        if str(payload.get('Name') or '').strip():
-            add_exercise(payload)
-            any_change = True
-
-    if any_change:
-        fetch_data.clear()
-        st.rerun()
+    new_sets = st.number_input("Sets", min_value=0, value=None, step=1)
+    if new_type == 'Reps':
+        new_reps = st.number_input("Reps", min_value=0, value=None, step=1)
+        new_time = None
     else:
-        st.info("No changes to save.")
+        new_reps = None
+        new_time = st.text_input("Time (e.g. 00:15)")
+    new_rest = st.number_input("Rest", min_value=0, value=None, step=1)
+    new_comments = st.text_area("Comments")
+
+    phase_opts = PipelineConfig.ALLOWED_PHASES
+    new_phase = st.selectbox("Phase", phase_opts)
+
+    if st.button("💾 Create Exercise", use_container_width=True):
+        name_clean = new_name.strip()
+        existing_names_lower = df_dict['name'].dropna().str.lower().tolist() if 'name' in df_dict.columns else []
+
+        if not name_clean:
+            st.error("Name is required.")
+        elif name_clean.lower() in existing_names_lower:
+            st.error(f"An exercise named '{name_clean}' already exists.")
+        else:
+            payload = {
+                'Name': name_clean,
+                'Type': new_type,
+                'Sets': new_sets,
+                'Reps': new_reps,
+                'Time': new_time,
+                'Rest': new_rest,
+                'Comments': new_comments,
+                'Phase': new_phase,
+            }
+            if add_exercise(payload):
+                fetch_data.clear()
+                st.rerun()
+
+
+@st.dialog("✏️ Edit Exercise")
+def edit_exercise_modal(exercise_data):
+    st.write(f"**Name:** {exercise_data['name']}")
+    exercise_id = int(exercise_data['id'])
+
+    type_opts = PipelineConfig.ALLOWED_EXERCISE_TYPES
+    current_type = exercise_data['type'] if pd.notna(exercise_data['type']) and exercise_data['type'] in type_opts else type_opts[0]
+    new_type = st.selectbox("Type", type_opts, index=type_opts.index(current_type))
+
+    current_sets = None if pd.isna(exercise_data['sets']) else int(exercise_data['sets'])
+    new_sets = st.number_input("Sets", min_value=0, value=current_sets, step=1)
+
+    if new_type == 'Reps':
+        current_reps = None if pd.isna(exercise_data['reps']) else int(exercise_data['reps'])
+        new_reps = st.number_input("Reps", min_value=0, value=current_reps, step=1)
+        new_time = None
+    else:
+        current_time = "" if pd.isna(exercise_data['time']) else str(exercise_data['time'])
+        new_time = st.text_input("Time (e.g. 00:15)", value=current_time)
+        new_reps = None
+
+    current_rest = None if pd.isna(exercise_data['rest']) else int(exercise_data['rest'])
+    new_rest = st.number_input("Rest", min_value=0, value=current_rest, step=1)
+
+    current_comments = "" if pd.isna(exercise_data['comments']) else str(exercise_data['comments'])
+    new_comments = st.text_area("Comments", value=current_comments)
+
+    phase_opts = PipelineConfig.ALLOWED_PHASES
+    current_phase = exercise_data['phase'] if pd.notna(exercise_data['phase']) and exercise_data['phase'] in phase_opts else phase_opts[0]
+    new_phase = st.selectbox("Phase", phase_opts, index=phase_opts.index(current_phase))
+
+    st.markdown("---")
+    col_save, col_del = st.columns(2)
+
+    with col_save:
+        if st.button("💾 Save Changes", use_container_width=True):
+            payload = {
+                'Type': new_type,
+                'Sets': new_sets,
+                'Reps': new_reps,
+                'Time': new_time,
+                'Rest': new_rest,
+                'Comments': new_comments,
+                'Phase': new_phase,
+            }
+            if update_exercise(exercise_id, payload):
+                fetch_data.clear()
+                st.session_state.pop('confirm_delete_exercise_id', None)
+                st.rerun()
+
+    with col_del:
+        if st.button("🗑️ Delete Exercise", use_container_width=True):
+            st.session_state.confirm_delete_exercise_id = exercise_id
+
+    # Two-step delete confirmation
+    if st.session_state.get('confirm_delete_exercise_id') == exercise_id:
+        st.warning(f"Delete **{exercise_data['name']}** permanently? This also removes it from any sessions it's linked to.")
+        col_yes, col_no = st.columns(2)
+        with col_yes:
+            if st.button("⚠️ Yes, delete", use_container_width=True):
+                if delete_exercise(exercise_id):
+                    fetch_data.clear()
+                    st.session_state.pop('confirm_delete_exercise_id', None)
+                    st.rerun()
+        with col_no:
+            if st.button("Cancel", use_container_width=True):
+                st.session_state.pop('confirm_delete_exercise_id', None)
+                st.rerun()
+
+
+if st.button("➕ Add New Exercise"):
+    add_exercise_modal()
+
+_browse_cols = ['name', 'type', 'sets', 'reps', 'time', 'rest', 'comments']
+_browse_cols = [c for c in _browse_cols if c in df_dict.columns]
+
+phase_tabs = st.tabs(PipelineConfig.ALLOWED_PHASES)
+for tab, phase in zip(phase_tabs, PipelineConfig.ALLOWED_PHASES):
+    with tab:
+        phase_df = df_dict[df_dict['phase'] == phase].reset_index(drop=True)
+        if phase_df.empty:
+            st.info(f"No exercises tagged '{phase}' yet.")
+            continue
+
+        event = st.dataframe(
+            phase_df[_browse_cols],
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
+            key=f"exercise_browse_{phase}",
+        )
+
+        selected_rows = event.selection.rows
+        selection_signature = f"{phase}:{selected_rows}"
+
+        if selected_rows and st.session_state.get("last_exercise_selection") != selection_signature:
+            st.session_state.last_exercise_selection = selection_signature
+            edit_exercise_modal(phase_df.iloc[selected_rows[0]])
