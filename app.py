@@ -26,13 +26,13 @@ st.markdown(theme.inject_global_css(), unsafe_allow_html=True)
 
 # --- CUSTOM CSS FOR CALENDAR STYLING ---
 # Centers the day number over each cell and makes it legible against the
-# background color used for that day's training category (see category_colors).
-st.markdown("""
+# background color used for that day's training category (see theme.CATEGORY_COLORS).
+st.markdown(f"""
 <style>
-.fc-daygrid-day-frame {
+.fc-daygrid-day-frame {{
     position: relative !important;
-}
-.fc-daygrid-day-top {
+}}
+.fc-daygrid-day-top {{
     position: absolute !important;
     top: 50% !important;
     left: 50% !important;
@@ -43,20 +43,21 @@ st.markdown("""
     width: 100% !important;
     z-index: 10 !important;
     margin-top: 0 !important;
-}
-.fc-daygrid-day-number {
+}}
+.fc-daygrid-day-number {{
+    font-family: {theme.FONT_MONO} !important;
     font-size: 1.5rem !important;
-    font-weight: 800 !important;
-    color: white !important;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.8), -1px -1px 4px rgba(0,0,0,0.8) !important;
+    font-weight: 700 !important;
+    color: {theme.CHALK} !important;
+    text-shadow: 1px 1px 3px {theme.BASALT}, -1px -1px 3px {theme.BASALT} !important;
     text-decoration: none !important;
-}
-.fc-daygrid-day-events {
+}}
+.fc-daygrid-day-events {{
     pointer-events: none !important;
-}
-.fc-bg-event {
+}}
+.fc-bg-event {{
     opacity: 0.85 !important;
-}
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -113,81 +114,83 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
     """
     st.write(f"**Date:** {session_data['date'].strftime('%d/%m/%Y')}")
 
-    # 1. Form inputs
-    if is_new:
-        cat_opts = PipelineConfig.ALLOWED_CATEGORIES
-        new_cat = st.selectbox("Category", cat_opts)
-    else:
-        st.write(f"**Category:** {session_data['category']}")
-        new_cat = session_data['category']
+    with st.container(border=True):
+        st.markdown("**Details**")
 
-    current_effort = None if pd.isna(session_data['effort']) else int(session_data['effort'])
-    new_effort = st.number_input("Effort Scale (1-10)", min_value=1, max_value=10, value=current_effort, step=1)
+        # 1. Form inputs
+        if is_new:
+            cat_opts = PipelineConfig.ALLOWED_CATEGORIES
+            new_cat = st.selectbox("Category", cat_opts)
+        else:
+            st.write(f"**Category:** {session_data['category']}")
+            new_cat = session_data['category']
 
-    gym_opts = [""] + list(PipelineConfig.GYM_MAPPING.keys())
-    current_gym = session_data['gym_grade'] if pd.notna(session_data['gym_grade']) and session_data['gym_grade'] in gym_opts else ""
-    new_gym = st.selectbox("Max Gym Grade", gym_opts, index=gym_opts.index(current_gym))
+        current_effort = None if pd.isna(session_data['effort']) else int(session_data['effort'])
+        new_effort = st.number_input("Effort Scale (1-10)", min_value=1, max_value=10, value=current_effort, step=1)
 
-    mb_opts = [""] + list(PipelineConfig.MOONBOARD_MAPPING.keys())
-    current_mb = session_data['moonboard_grade'] if pd.notna(session_data['moonboard_grade']) and session_data['moonboard_grade'] in mb_opts else ""
-    new_mb = st.selectbox("Max Moonboard Grade", mb_opts, index=mb_opts.index(current_mb))
+        gym_opts = [""] + list(PipelineConfig.GYM_MAPPING.keys())
+        current_gym = session_data['gym_grade'] if pd.notna(session_data['gym_grade']) and session_data['gym_grade'] in gym_opts else ""
+        new_gym = st.selectbox("Max Gym Grade", gym_opts, index=gym_opts.index(current_gym))
 
-    # 2. Exercises
-    st.markdown("---")
-    st.markdown("**Exercises**")
+        mb_opts = [""] + list(PipelineConfig.MOONBOARD_MAPPING.keys())
+        current_mb = session_data['moonboard_grade'] if pd.notna(session_data['moonboard_grade']) and session_data['moonboard_grade'] in mb_opts else ""
+        new_mb = st.selectbox("Max Moonboard Grade", mb_opts, index=mb_opts.index(current_mb))
 
-    session_key = session_data['id'] if pd.notna(session_data['id']) else session_data['date'].strftime('%Y%m%d')
+    with st.container(border=True):
+        # 2. Exercises
+        st.markdown("**Exercises**")
 
-    # Determine default selections
-    if is_new:
-        # Smart State Injection: Fetch "Before" and "After" from the most recent past session
-        default_before = []
-        default_during = [] # Always start blank for climbing
-        default_after = []
+        session_key = session_data['id'] if pd.notna(session_data['id']) else session_data['date'].strftime('%Y%m%d')
 
-        if not df_past.empty:
-            # Grab the absolute most recent session logged
-            latest_session = df_past.sort_values(by='date', ascending=False).iloc[0]
-            if pd.notna(latest_session['exercises']):
-                last_exercises = [ex.strip() for ex in str(latest_session['exercises']).split(',') if ex.strip()]
-                # Only inject the ones that belong to the Before or After phases
-                default_before = [ex for ex in last_exercises if ex in exercises_before]
-                default_after = [ex for ex in last_exercises if ex in exercises_after]
-    else:
-        # Editing an existing session: Load its specific exercises
-        current_text = "" if pd.isna(session_data['exercises']) else str(session_data['exercises'])
-        current_list = [ex.strip() for ex in current_text.split(',') if ex.strip()]
+        # Determine default selections
+        if is_new:
+            # Smart State Injection: Fetch "Before" and "After" from the most recent past session
+            default_before = []
+            default_during = [] # Always start blank for climbing
+            default_after = []
 
-        default_before = [ex for ex in current_list if ex in exercises_before]
-        default_during = [ex for ex in current_list if ex in exercises_during]
-        default_after = [ex for ex in current_list if ex in exercises_after]
+            if not df_past.empty:
+                # Grab the absolute most recent session logged
+                latest_session = df_past.sort_values(by='date', ascending=False).iloc[0]
+                if pd.notna(latest_session['exercises']):
+                    last_exercises = [ex.strip() for ex in str(latest_session['exercises']).split(',') if ex.strip()]
+                    # Only inject the ones that belong to the Before or After phases
+                    default_before = [ex for ex in last_exercises if ex in exercises_before]
+                    default_after = [ex for ex in last_exercises if ex in exercises_after]
+        else:
+            # Editing an existing session: Load its specific exercises
+            current_text = "" if pd.isna(session_data['exercises']) else str(session_data['exercises'])
+            current_list = [ex.strip() for ex in current_text.split(',') if ex.strip()]
 
-    # Render Mobile Tabs
-    tab1, tab2, tab3 = st.tabs(["🏃 Warm-up", "🧗 Climbing", "🏋️ Cool-down"])
+            default_before = [ex for ex in current_list if ex in exercises_before]
+            default_during = [ex for ex in current_list if ex in exercises_during]
+            default_after = [ex for ex in current_list if ex in exercises_after]
 
-    with tab1:
-        selected_before = st.multiselect(
-            "Before", options=exercises_before, default=default_before,
-            key=f"ex_before_{session_key}", label_visibility="collapsed"
-        )
-    with tab2:
-        selected_during = st.multiselect(
-            "During", options=exercises_during, default=default_during,
-            key=f"ex_during_{session_key}", label_visibility="collapsed"
-        )
-    with tab3:
-        selected_after = st.multiselect(
-            "After", options=exercises_after, default=default_after,
-            key=f"ex_after_{session_key}", label_visibility="collapsed"
-        )
+        # Render Mobile Tabs
+        tab1, tab2, tab3 = st.tabs(["🏃 Warm-up", "🧗 Climbing", "🏋️ Cool-down"])
 
-    # Combine them all into a single list for the save function
-    selected_exercises = selected_before + selected_during + selected_after
+        with tab1:
+            selected_before = st.multiselect(
+                "Before", options=exercises_before, default=default_before,
+                key=f"ex_before_{session_key}", label_visibility="collapsed"
+            )
+        with tab2:
+            selected_during = st.multiselect(
+                "During", options=exercises_during, default=default_during,
+                key=f"ex_during_{session_key}", label_visibility="collapsed"
+            )
+        with tab3:
+            selected_after = st.multiselect(
+                "After", options=exercises_after, default=default_after,
+                key=f"ex_after_{session_key}", label_visibility="collapsed"
+            )
 
-    st.markdown("---")
+        # Combine them all into a single list for the save function
+        selected_exercises = selected_before + selected_during + selected_after
 
     def _finish():
         fetch_data.clear()
+        st.session_state.pop('confirm_delete_session_id', None)
         if on_saved:
             on_saved()
         else:
@@ -207,6 +210,7 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
             if add_session(new_session_data):
                 _finish()
     else:
+        session_id = int(session_data['id'])
         col_save, col_del = st.columns(2)
         with col_save:
             if st.button("💾 Save Changes", use_container_width=True):
@@ -216,12 +220,24 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
                     'Max Moonboard Grade': new_mb,
                     'Exercises': ", ".join(selected_exercises)
                 }
-                if update_session(int(session_data['id']), updated_data):
+                if update_session(session_id, updated_data):
                     _finish()
         with col_del:
             if st.button("🗑️ Delete Session", use_container_width=True):
-                if delete_session(int(session_data['id'])):
-                    _finish()
+                st.session_state.confirm_delete_session_id = session_id
+
+        # Two-step delete confirmation, mirroring the exercise delete pattern
+        if st.session_state.get('confirm_delete_session_id') == session_id:
+            st.warning("Delete this session permanently? This also removes its logged exercises.")
+            col_yes, col_no = st.columns(2)
+            with col_yes:
+                if st.button("⚠️ Yes, delete", use_container_width=True, key=f"confirm_del_session_yes_{session_id}"):
+                    if delete_session(session_id):
+                        _finish()
+            with col_no:
+                if st.button("Cancel", use_container_width=True, key=f"confirm_del_session_no_{session_id}"):
+                    st.session_state.pop('confirm_delete_session_id', None)
+                    st.rerun()
 
 
 @st.dialog("✏️ Session Details")
@@ -270,12 +286,18 @@ def due_sessions_carousel():
             st.session_state.due_carousel_index += 1
             st.rerun()
 
-    st.warning("This session is missing its effort - fill it in, delete it, or skip it for now.")
+    st.warning("This session is missing its effort - fill it in, delete it, remind yourself later, or dismiss the whole list for now.")
 
     _render_session_edit_form(session_data, is_new=False, on_saved=_advance_due_carousel)
 
-    if st.button("✖️ Skip for now", use_container_width=True, key="due_carousel_skip"):
-        _advance_due_carousel()
+    col_skip, col_dismiss = st.columns(2)
+    with col_skip:
+        if st.button("⏭️ Remind Me Later", use_container_width=True, key="due_carousel_skip"):
+            _advance_due_carousel()
+    with col_dismiss:
+        if st.button("✖️ Dismiss All", use_container_width=True, key="due_carousel_dismiss_all"):
+            st.session_state.due_carousel_index = len(queue)
+            st.rerun()
 
 
 def _make_blank_session(clicked_date_str: str) -> pd.Series:
@@ -313,6 +335,7 @@ tab_calendar, tab_analytics, tab_library = st.tabs(["📅 Calendar", "📊 Analy
 
 with tab_calendar:
     st.markdown("*Click any colored session to edit it, or click a blank day to log a missed session.*")
+    st.markdown(theme.color_key_html(theme.CATEGORY_COLORS, title="Category Key"), unsafe_allow_html=True)
 
     # Sessions are rendered as full-day background color blocks rather than
     # titled events, so the calendar reads like a training-day heatmap

@@ -72,6 +72,30 @@ PLOTLY_TEMPLATE = go.layout.Template(
 )
 
 
+def color_key_html(colors: dict, title: str = "Color Key") -> str:
+    """A small placard-style legend - circular swatches + labels - styled
+    like the color-key sign posted on a real bouldering gym wall. Used to
+    explain what a strip of colored chips/blocks means (e.g. the calendar's
+    category colors)."""
+    swatches = "".join(
+        f'<span style="display:inline-flex; align-items:center; gap:0.4rem;">'
+        f'<span style="width:11px; height:11px; border-radius:50%; background:{color}; '
+        f'display:inline-block; box-shadow:0 0 0 1px {ROPE};"></span>'
+        f'<span style="font-family:{FONT_BODY}; font-size:0.85rem; color:{CHALK};">{label}</span>'
+        f'</span>'
+        for label, color in colors.items()
+    )
+    return f"""
+<div style="display:flex; align-items:center; gap:1.4rem; flex-wrap:wrap;
+            padding:0.65rem 1rem; margin:0.4rem 0 1rem 0;
+            background:{CHALK_BAG}; border:1px solid {ROPE}; border-radius:8px;">
+    <span style="font-family:{FONT_MONO}; font-size:0.7rem; color:{STONE};
+                 text-transform:uppercase; letter-spacing:0.08em;">{title}</span>
+    {swatches}
+</div>
+"""
+
+
 def inject_global_css() -> str:
     """Google Fonts import + base typography/spacing rules for the app.
     Return value is meant to be passed straight to st.markdown(unsafe_allow_html=True).
