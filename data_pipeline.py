@@ -187,8 +187,11 @@ def _validate_records(records: list[dict], model: type[BaseModel]) -> tuple[list
 # imports the supabase client directly.
 # ============================================================
 
-def _get_supabase_client(config: Optional['PipelineConfig'] = None) -> Client:
-    """Authenticate and return the Supabase client based on the environment"""
+@st.cache_resource
+def _create_supabase_client() -> Client:
+    """Build the Supabase client once per process and reuse it. Cached with
+    st.cache_resource since re-authenticating on every single read/write
+    call is avoidable overhead"""
     load_dotenv()  # no-op if there's no .env file
 
     try:
@@ -205,6 +208,13 @@ def _get_supabase_client(config: Optional['PipelineConfig'] = None) -> Client:
             "for local dev, or add a [supabase] url/key block to Streamlit secrets in the cloud."
         )
     return create_client(url, key)
+
+
+def _get_supabase_client(config: Optional['PipelineConfig'] = None) -> Client:
+    """Return the shared, cached Supabase client. `config` is accepted (and
+    ignored) so every call site can keep passing its PipelineConfig without
+    it leaking into the cache key"""
+    return _create_supabase_client()
 
 
 def _clean_write_value(v: Any) -> Any:
@@ -348,11 +358,15 @@ def update_session(session_id: int, updated_data: dict, config: Optional[Pipelin
         for k, v in updated_data.items()
         if k in field_map
     }
-    if payload:
-        client.table(config.SESSIONS_TABLE).update(payload).eq('id', session_id).execute()
+    try:
+        if payload:
+            client.table(config.SESSIONS_TABLE).update(payload).eq('id', session_id).execute()
 
-    if 'Exercises' in updated_data:
-        _sync_session_exercises(session_id, updated_data.get('Exercises'), config, client)
+        if 'Exercises' in updated_data:
+            _sync_session_exercises(session_id, updated_data.get('Exercises'), config, client)
+    except Exception as exc:
+        st.error(f"Couldn't save changes: {exc}")
+        return False
 
     return True
 
@@ -373,12 +387,17 @@ def add_session(new_data: dict, config: Optional[PipelineConfig] = None) -> bool
         'moonboard_grade': _clean_write_value(new_data.get('Max Moonboard Grade')),
         'injured': False,
     }
-    response = client.table(config.SESSIONS_TABLE).insert(session_payload).execute()
-    if not response.data:
+    try:
+        response = client.table(config.SESSIONS_TABLE).insert(session_payload).execute()
+        if not response.data:
+            return False
+
+        session_id = response.data[0]['id']
+        _sync_session_exercises(session_id, new_data.get('Exercises'), config, client)
+    except Exception as exc:
+        st.error(f"Couldn't log session: {exc}")
         return False
 
-    session_id = response.data[0]['id']
-    _sync_session_exercises(session_id, new_data.get('Exercises'), config, client)
     return True
 
 
@@ -387,7 +406,11 @@ def delete_session(session_id: int, config: Optional[PipelineConfig] = None) -> 
     if config is None:
         config = PipelineConfig()
     client = _get_supabase_client(config)
-    client.table(config.SESSIONS_TABLE).delete().eq('id', session_id).execute()
+    try:
+        client.table(config.SESSIONS_TABLE).delete().eq('id', session_id).execute()
+    except Exception as exc:
+        st.error(f"Couldn't delete session: {exc}")
+        return False
     return True
 
 
@@ -413,7 +436,11 @@ def add_exercise(new_data: dict, config: Optional[PipelineConfig] = None) -> boo
         'comments': _clean_write_value(new_data.get('Comments')),
         'phase': _clean_write_value(new_data.get('Phase')),
     }
-    client.table(config.EXERCISES_TABLE).insert(payload).execute()
+    try:
+        client.table(config.EXERCISES_TABLE).insert(payload).execute()
+    except Exception as exc:
+        st.error(f"Couldn't create exercise: {exc}")
+        return False
     return True
 
 
@@ -432,8 +459,12 @@ def update_exercise(exercise_id: int, updated_data: dict, config: Optional[Pipel
         for k, v in updated_data.items()
         if k in field_map
     }
-    if payload:
-        client.table(config.EXERCISES_TABLE).update(payload).eq('id', exercise_id).execute()
+    try:
+        if payload:
+            client.table(config.EXERCISES_TABLE).update(payload).eq('id', exercise_id).execute()
+    except Exception as exc:
+        st.error(f"Couldn't save exercise: {exc}")
+        return False
     return True
 
 
@@ -442,7 +473,11 @@ def delete_exercise(exercise_id: int, config: Optional[PipelineConfig] = None) -
     if config is None:
         config = PipelineConfig()
     client = _get_supabase_client(config)
-    client.table(config.EXERCISES_TABLE).delete().eq('id', exercise_id).execute()
+    try:
+        client.table(config.EXERCISES_TABLE).delete().eq('id', exercise_id).execute()
+    except Exception as exc:
+        st.error(f"Couldn't delete exercise: {exc}")
+        return False
     return True
 
 
@@ -452,6 +487,7 @@ def delete_exercise(exercise_id: int, config: Optional[PipelineConfig] = None) -
 # Pure functions over already-cleaned DataFrames.
 # ============================================================
 
+@st.cache_data
 def compute_acwr(df_past: pd.DataFrame, acute_window: int = 7, chronic_window: int = 28) -> pd.DataFrame:
     """Acute:Chronic Workload Ratio - a metric of training
     load trend, used as an injury-risk / readiness signal

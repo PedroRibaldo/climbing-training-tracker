@@ -69,7 +69,8 @@ def fetch_data():
     modal's save/delete/add actions below)."""
     return load_clean_data()
 
-df_past, df_future, df_dict = fetch_data()
+with st.spinner("Loading your training data…"):
+    df_past, df_future, df_dict = fetch_data()
 
 # Single combined view of every dated session, used to drive the calendar
 df_all_calendar = pd.concat([df_past, df_future]).dropna(subset=['date']).copy()
@@ -207,7 +208,9 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
                 'Max Moonboard Grade': new_mb,
                 'Exercises': ", ".join(selected_exercises)
             }
-            if add_session(new_session_data):
+            with st.spinner("Saving…"):
+                success = add_session(new_session_data)
+            if success:
                 _finish()
     else:
         session_id = int(session_data['id'])
@@ -220,7 +223,9 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
                     'Max Moonboard Grade': new_mb,
                     'Exercises': ", ".join(selected_exercises)
                 }
-                if update_session(session_id, updated_data):
+                with st.spinner("Saving…"):
+                    success = update_session(session_id, updated_data)
+                if success:
                     _finish()
         with col_del:
             if st.button("🗑️ Delete Session", use_container_width=True):
@@ -232,7 +237,9 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
             col_yes, col_no = st.columns(2)
             with col_yes:
                 if st.button("⚠️ Yes, delete", use_container_width=True, key=f"confirm_del_session_yes_{session_id}"):
-                    if delete_session(session_id):
+                    with st.spinner("Deleting…"):
+                        success = delete_session(session_id)
+                    if success:
                         _finish()
             with col_no:
                 if st.button("Cancel", use_container_width=True, key=f"confirm_del_session_no_{session_id}"):
@@ -600,7 +607,9 @@ def add_exercise_modal():
                 'Comments': new_comments,
                 'Phase': new_phase,
             }
-            if add_exercise(payload):
+            with st.spinner("Saving…"):
+                success = add_exercise(payload)
+            if success:
                 fetch_data.clear()
                 st.rerun()
 
@@ -650,7 +659,9 @@ def edit_exercise_modal(exercise_data):
                 'Comments': new_comments,
                 'Phase': new_phase,
             }
-            if update_exercise(exercise_id, payload):
+            with st.spinner("Saving…"):
+                success = update_exercise(exercise_id, payload)
+            if success:
                 fetch_data.clear()
                 st.session_state.pop('confirm_delete_exercise_id', None)
                 st.rerun()
@@ -665,7 +676,9 @@ def edit_exercise_modal(exercise_data):
         col_yes, col_no = st.columns(2)
         with col_yes:
             if st.button("⚠️ Yes, delete", use_container_width=True):
-                if delete_exercise(exercise_id):
+                with st.spinner("Deleting…"):
+                    success = delete_exercise(exercise_id)
+                if success:
                     fetch_data.clear()
                     st.session_state.pop('confirm_delete_exercise_id', None)
                     st.rerun()
