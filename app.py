@@ -11,9 +11,9 @@ renders:
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from streamlit_calendar import calendar
 
 from data_pipeline import load_clean_data, update_session, add_session, delete_session, add_exercise, update_exercise, delete_exercise, compute_acwr, compute_kpis, get_peak_sessions, PipelineConfig
@@ -384,14 +384,11 @@ with tab_analytics:
             df_effort = df_analytics.dropna(subset=['effort']).sort_values(by='date')
 
             if not df_effort.empty:
-                fig, ax = plt.subplots(figsize=(5, 3.5))
-                sns.lineplot(data=df_effort, x='date', y='effort', marker='o', color=theme.ACCENT, ax=ax)
-                ax.set_ylim(0, 10.5)
-                ax.set_ylabel("Effort (1-10)")
-                ax.set_xlabel("")
-                ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
-                plt.xticks(rotation=45)
-                st.pyplot(fig, use_container_width=True)
+                fig = px.line(df_effort, x='date', y='effort', markers=True, template=theme.PLOTLY_TEMPLATE)
+                fig.update_traces(line_color=theme.ACCENT, marker=dict(color=theme.ACCENT, size=8))
+                fig.update_yaxes(title="Effort (1-10)", range=[0, 10.5])
+                fig.update_xaxes(title="", tickformat="%d/%m")
+                st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("No effort data logged.")
 
@@ -402,44 +399,36 @@ with tab_analytics:
             df_moonboard = df_analytics[df_analytics['moonboard_numeric'] != -1].sort_values(by='date')
 
             if not df_gym.empty or not df_moonboard.empty:
-                fig_grades, ax1 = plt.subplots(figsize=(5, 3.5))
                 gym_rev_map = {v: k for k, v in PipelineConfig.GYM_MAPPING.items()}
                 mb_rev_map = {v: k for k, v in PipelineConfig.MOONBOARD_MAPPING.items()}
 
                 # Gym grade and Moonboard grade use different scales, so they
                 # share the x-axis (date) but get independent y-axes
-                color1 = theme.GRADE_COLORS["Blue"]
-                ax1.set_ylabel('Gym Color', color=color1)
+                fig_grades = make_subplots(specs=[[{"secondary_y": True}]])
                 if not df_gym.empty:
-                    sns.lineplot(data=df_gym, x='date', y='gym_numeric', marker='s', color=color1, ax=ax1, label='Gym Grade')
-
-                ax1.set_yticks(list(gym_rev_map.keys()))
-                ax1.set_yticklabels(list(gym_rev_map.values()))
-                ax1.tick_params(axis='y', labelcolor=color1)
-
-                ax2 = ax1.twinx()
-                color2 = theme.GRADE_COLORS["Purple"]
-                ax2.set_ylabel('Moonboard (V)', color=color2)
+                    fig_grades.add_trace(go.Scatter(
+                        x=df_gym['date'], y=df_gym['gym_numeric'], name='Gym Grade',
+                        mode='lines+markers', marker=dict(symbol='square'),
+                        line_color=theme.GRADE_COLORS["Blue"],
+                    ), secondary_y=False)
                 if not df_moonboard.empty:
-                    sns.lineplot(data=df_moonboard, x='date', y='moonboard_numeric', marker='^', color=color2, ax=ax2, label='Moonboard')
+                    fig_grades.add_trace(go.Scatter(
+                        x=df_moonboard['date'], y=df_moonboard['moonboard_numeric'], name='Moonboard',
+                        mode='lines+markers', marker=dict(symbol='triangle-up'),
+                        line_color=theme.GRADE_COLORS["Purple"],
+                    ), secondary_y=True)
 
-                ax2.set_yticks(list(mb_rev_map.keys()))
-                ax2.set_yticklabels(list(mb_rev_map.values()))
-                ax2.tick_params(axis='y', labelcolor=color2)
-
-                ax1.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
-                ax1.set_xlabel("")
-                plt.xticks(rotation=45)
-
-                # Merge both axes' legends into a single legend box
-                lines_1, labels_1 = ax1.get_legend_handles_labels()
-                lines_2, labels_2 = ax2.get_legend_handles_labels()
-                ax2.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', fontsize='small')
-
-                if ax1.get_legend() is not None:
-                    ax1.get_legend().remove()
-
-                st.pyplot(fig_grades, use_container_width=True)
+                fig_grades.update_layout(template=theme.PLOTLY_TEMPLATE, legend=dict(orientation='h', y=1.15))
+                fig_grades.update_yaxes(
+                    title_text="Gym Color", secondary_y=False, color=theme.GRADE_COLORS["Blue"],
+                    tickvals=list(gym_rev_map.keys()), ticktext=list(gym_rev_map.values()),
+                )
+                fig_grades.update_yaxes(
+                    title_text="Moonboard (V)", secondary_y=True, color=theme.GRADE_COLORS["Purple"],
+                    tickvals=list(mb_rev_map.keys()), ticktext=list(mb_rev_map.values()),
+                )
+                fig_grades.update_xaxes(title="", tickformat="%d/%m")
+                st.plotly_chart(fig_grades, use_container_width=True)
             else:
                 st.info("No grade data logged.")
 
@@ -448,19 +437,19 @@ with tab_analytics:
             df_dist = df_analytics[df_analytics['category'] != 'Rest']
 
             if not df_dist.empty:
-                fig_dist, ax_dist = plt.subplots(figsize=(5, 3.5))
                 category_counts = df_dist['category'].value_counts()
-
-                ax_dist.pie(
-                    category_counts,
-                    labels=category_counts.index,
-                    autopct='%1.1f%%',
-                    startangle=140,
-                    colors=[theme.CATEGORY_COLORS.get(cat, theme.CATEGORY_FALLBACK_COLOR) for cat in category_counts.index],
-                    wedgeprops={'edgecolor': theme.BASALT, 'linewidth': 1.5}
+                fig_dist = px.pie(
+                    names=category_counts.index,
+                    values=category_counts.values,
+                    color=category_counts.index,
+                    color_discrete_map=theme.CATEGORY_COLORS,
+                    template=theme.PLOTLY_TEMPLATE,
                 )
-                ax_dist.axis('equal')
-                st.pyplot(fig_dist, use_container_width=True)
+                fig_dist.update_traces(
+                    textinfo='percent+label',
+                    marker=dict(line=dict(color=theme.BASALT, width=1.5)),
+                )
+                st.plotly_chart(fig_dist, use_container_width=True)
             else:
                 st.info("No training sessions logged.")
 
@@ -477,18 +466,27 @@ with tab_analytics:
             acwr_windowed = acwr_df[(acwr_df.index.date >= start_date) & (acwr_df.index.date <= end_date)]
 
             if not acwr_windowed.empty and acwr_windowed['acwr'].notna().any():
-                fig_acwr, ax_acwr = plt.subplots(figsize=(5, 3.5))
                 band_top = max(2.0, acwr_windowed['acwr'].max(skipna=True) + 0.2)
-                ax_acwr.axhspan(0.8, 1.3, color=theme.ACWR_BAND_COLORS["sweet_spot"], alpha=0.15, label='Sweet spot')
-                ax_acwr.axhspan(1.3, 1.5, color=theme.ACWR_BAND_COLORS["caution"], alpha=0.15, label='Caution')
-                ax_acwr.axhspan(1.5, band_top, color=theme.ACWR_BAND_COLORS["high_risk"], alpha=0.15, label='High risk')
-                sns.lineplot(data=acwr_windowed, x=acwr_windowed.index, y='acwr', marker='o', color=theme.ACCENT, ax=ax_acwr)
-                ax_acwr.set_ylabel("ACWR")
-                ax_acwr.set_xlabel("")
-                ax_acwr.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
-                plt.xticks(rotation=45)
-                ax_acwr.legend(loc='upper left', fontsize='x-small')
-                st.pyplot(fig_acwr, use_container_width=True)
+                band_defs = [
+                    (0.8, 1.3, "sweet_spot", "Sweet spot"),
+                    (1.3, 1.5, "caution", "Caution"),
+                    (1.5, band_top, "high_risk", "High risk"),
+                ]
+                fig_acwr = go.Figure()
+                for y0, y1, key, label in band_defs:
+                    fig_acwr.add_hrect(y0=y0, y1=y1, fillcolor=theme.ACWR_BAND_COLORS[key], opacity=0.15, line_width=0)
+                    fig_acwr.add_trace(go.Scatter(
+                        x=[None], y=[None], mode='markers',
+                        marker=dict(size=10, color=theme.ACWR_BAND_COLORS[key]), name=label,
+                    ))
+                fig_acwr.add_trace(go.Scatter(
+                    x=acwr_windowed.index, y=acwr_windowed['acwr'], mode='lines+markers',
+                    line_color=theme.ACCENT, name='ACWR', showlegend=False,
+                ))
+                fig_acwr.update_layout(template=theme.PLOTLY_TEMPLATE, legend=dict(orientation='h', y=1.2, x=0))
+                fig_acwr.update_yaxes(title="ACWR", range=[0, band_top])
+                fig_acwr.update_xaxes(title="", type='date', tickformat="%d/%m")
+                st.plotly_chart(fig_acwr, use_container_width=True)
                 st.caption("Recent (7-day) vs. baseline (28-day) training load. Needs a few weeks of consistent logging to be meaningful.")
             else:
                 st.info("Not enough training history yet to compute ACWR.")
@@ -500,15 +498,19 @@ with tab_analytics:
             df_mb_yield = df_yield[df_yield['moonboard_numeric'] != -1]
 
             if not df_gym_yield.empty or not df_mb_yield.empty:
-                fig_yield, ax_yield = plt.subplots(figsize=(5, 3.5))
+                fig_yield = go.Figure()
                 if not df_gym_yield.empty:
-                    ax_yield.scatter(df_gym_yield['effort'], df_gym_yield['gym_numeric'], color=theme.GRADE_COLORS["Blue"], label='Gym', alpha=0.7)
+                    fig_yield.add_trace(go.Scatter(
+                        x=df_gym_yield['effort'], y=df_gym_yield['gym_numeric'], mode='markers', name='Gym',
+                        marker=dict(color=theme.GRADE_COLORS["Blue"], opacity=0.7),
+                    ))
                 if not df_mb_yield.empty:
-                    ax_yield.scatter(df_mb_yield['effort'], df_mb_yield['moonboard_numeric'], color=theme.GRADE_COLORS["Purple"], label='Moonboard', alpha=0.7)
-                ax_yield.set_xlabel("Effort (1-10)")
-                ax_yield.set_ylabel("Max grade (encoded)")
-                ax_yield.legend(loc='upper left', fontsize='small')
-                st.pyplot(fig_yield, use_container_width=True)
+                    fig_yield.add_trace(go.Scatter(
+                        x=df_mb_yield['effort'], y=df_mb_yield['moonboard_numeric'], mode='markers', name='Moonboard',
+                        marker=dict(color=theme.GRADE_COLORS["Purple"], opacity=0.7),
+                    ))
+                fig_yield.update_layout(template=theme.PLOTLY_TEMPLATE, xaxis_title="Effort (1-10)", yaxis_title="Max grade (encoded)")
+                st.plotly_chart(fig_yield, use_container_width=True)
             else:
                 st.info("No grade data logged in this range.")
 
