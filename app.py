@@ -16,10 +16,13 @@ import matplotlib.dates as mdates
 import seaborn as sns
 from streamlit_calendar import calendar
 
-from data_pipeline import load_clean_data, update_session, add_session, delete_session, add_exercise, update_exercise, delete_exercise, compute_acwr, get_peak_sessions, PipelineConfig
+from data_pipeline import load_clean_data, update_session, add_session, delete_session, add_exercise, update_exercise, delete_exercise, compute_acwr, compute_kpis, get_peak_sessions, PipelineConfig
+import theme
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Climbing Training Tracker", layout="wide")
+st.set_page_config(page_title="Climbing Training Tracker", page_icon="🧗", layout="wide")
+
+st.markdown(theme.inject_global_css(), unsafe_allow_html=True)
 
 # --- CUSTOM CSS FOR CALENDAR STYLING ---
 # Centers the day number over each cell and makes it legible against the
@@ -78,6 +81,24 @@ if not df_dict.empty and 'phase' in df_dict.columns and 'name' in df_dict.column
     exercises_after = df_dict[df_dict['phase'] == 'After']['name'].dropna().unique().tolist()
 else:
     exercises_before, exercises_during, exercises_after = [], [], []
+
+
+# --- HEADER + KPI STRIP ---
+st.title("🧗 Climbing Training")
+
+kpis = compute_kpis(df_past)
+kpi_cols = st.columns(4)
+with kpi_cols[0]:
+    st.metric("Current Streak", f"{kpis['streak']} d")
+with kpi_cols[1]:
+    st.metric("This Week", kpis['sessions_this_week'])
+with kpi_cols[2]:
+    acwr_value = "–" if kpis['acwr_current'] is None else f"{kpis['acwr_current']:.2f}"
+    acwr_delta = None if kpis['acwr_delta'] is None else f"{kpis['acwr_delta']:+.2f}"
+    st.metric("ACWR", acwr_value, delta=acwr_delta, delta_color="inverse")
+with kpi_cols[3]:
+    since_last = "–" if kpis['days_since_last'] is None else f"{kpis['days_since_last']} d"
+    st.metric("Since Last Session", since_last)
 
 
 # --- EDIT/CREATE SESSION MODAL (POP-UP) ---
@@ -287,243 +308,232 @@ if st.session_state.due_carousel_index < len(st.session_state.get("due_sessions_
     due_sessions_carousel()
 
 
-# --- INTERACTIVE CALENDAR ---
-st.header("📅 Training Calendar")
-st.markdown("*Click any colored session to edit it, or click a blank day to log a missed session.*")
+# --- TOP-LEVEL NAVIGATION ---
+tab_calendar, tab_analytics, tab_library = st.tabs(["📅 Calendar", "📊 Analytics", "🏋️ Exercise Library"])
 
-category_colors = {
-    "Strength": "#FF5733",
-    "Stamina": "#33C3FF",
-    "Technique": "#28B463",
-    "Free": "#8E44AD",
-    "Rest": "#95A5A6"
-}
+with tab_calendar:
+    st.markdown("*Click any colored session to edit it, or click a blank day to log a missed session.*")
 
-# Sessions are rendered as full-day background color blocks rather than
-# titled events, so the calendar reads like a training-day heatmap
-calendar_events = [
-    {
-        "title": str(row['category']) if pd.notna(row['category']) else "Unknown",
-        "start": row['date_str'],
-        "color": category_colors.get(str(row['category']), "#34495E"),
-        "display": "background",
-        "extendedProps": {"date_str": row['date_str']}
+    # Sessions are rendered as full-day background color blocks rather than
+    # titled events, so the calendar reads like a training-day heatmap
+    calendar_events = [
+        {
+            "title": str(row['category']) if pd.notna(row['category']) else "Unknown",
+            "start": row['date_str'],
+            "color": theme.CATEGORY_COLORS.get(str(row['category']), theme.CATEGORY_FALLBACK_COLOR),
+            "display": "background",
+            "extendedProps": {"date_str": row['date_str']}
+        }
+        for _, row in df_all_calendar.iterrows()
+    ]
+
+    calendar_options = {
+        "editable": "false",
+        "selectable": "true",
+        "height": "auto",
+        "headerToolbar": {
+            "left": "prev,next today",
+            "center": "title",
+            "right": "dayGridMonth,dayGridWeek"
+        },
+        "initialView": "dayGridMonth",
     }
-    for _, row in df_all_calendar.iterrows()
-]
 
-calendar_options = {
-    "editable": "false",
-    "selectable": "true",
-    "height": "auto",
-    "headerToolbar": {
-        "left": "prev,next today",
-        "center": "title",
-        "right": "dayGridMonth,dayGridWeek"
-    },
-    "initialView": "dayGridMonth",
-}
+    cal = calendar(events=calendar_events, options=calendar_options, callbacks=['dateClick'])
 
-cal = calendar(events=calendar_events, options=calendar_options, callbacks=['dateClick'])
+    # Handle a day-click by opening the modal for that date. The "last_click_event"
+    # guard prevents the modal from immediately reopening on every rerun that
+    # Streamlit triggers after the dialog is dismissed.
+    if cal.get("callback") == "dateClick":
+        current_click_event = str(cal)
 
-# Handle a day-click by opening the modal for that date. The "last_click_event"
-# guard prevents the modal from immediately reopening on every rerun that
-# Streamlit triggers after the dialog is dismissed.
-if cal.get("callback") == "dateClick":
-    current_click_event = str(cal)
+        if st.session_state.get("last_click_event") != current_click_event:
+            st.session_state.last_click_event = current_click_event
 
-    if st.session_state.get("last_click_event") != current_click_event:
-        st.session_state.last_click_event = current_click_event
+            raw_clicked_date = str(cal["dateClick"]["date"])
+            clean_clicked_date = raw_clicked_date.split("T")[0]
 
-        raw_clicked_date = str(cal["dateClick"]["date"])
-        clean_clicked_date = raw_clicked_date.split("T")[0]
+            existing_session = df_all_calendar[df_all_calendar['date_str'] == clean_clicked_date]
 
-        existing_session = df_all_calendar[df_all_calendar['date_str'] == clean_clicked_date]
+            if not existing_session.empty:
+                edit_session_modal(existing_session.iloc[0], is_new=False)
+            else:
+                edit_session_modal(_make_blank_session(clean_clicked_date), is_new=True)
 
-        if not existing_session.empty:
-            edit_session_modal(existing_session.iloc[0], is_new=False)
-        else:
-            edit_session_modal(_make_blank_session(clean_clicked_date), is_new=True)
 
-# --- ANALYTICS DASHBOARD ---
-st.markdown("---")
+with tab_analytics:
+    today_date = pd.to_datetime('today').date()
+    last_month_date = today_date - pd.Timedelta(days=30)
 
-today_date = pd.to_datetime('today').date()
-last_month_date = today_date - pd.Timedelta(days=30)
+    date_range = st.date_input(
+        "🗓️ Select Analytics Date Range",
+        value=(last_month_date, today_date),
+        max_value=today_date
+    )
 
-date_range = st.date_input(
-    "🗓️ Select Analytics Date Range",
-    value=(last_month_date, today_date),
-    max_value=today_date
-)
+    if len(date_range) == 2:
+        start_date, end_date = date_range
+        # Rest days are excluded from analytics since they carry no effort/grade data
+        mask = (df_past['date'].dt.date >= start_date) & (df_past['date'].dt.date <= end_date) & (df_past['category'] != 'Rest')
+        df_analytics = df_past[mask].copy()
 
-if len(date_range) == 2:
-    start_date, end_date = date_range
-    # Rest days are excluded from analytics since they carry no effort/grade data
-    mask = (df_past['date'].dt.date >= start_date) & (df_past['date'].dt.date <= end_date) & (df_past['category'] != 'Rest')
-    df_analytics = df_past[mask].copy()
+        col1, col2, col3 = st.columns(3)
 
-    col1, col2, col3 = st.columns(3)
+        with col1:
+            st.subheader("🔥 Training Intensity")
+            df_effort = df_analytics.dropna(subset=['effort']).sort_values(by='date')
 
-    with col1:
-        st.subheader("🔥 Training Intensity")
-        df_effort = df_analytics.dropna(subset=['effort']).sort_values(by='date')
+            if not df_effort.empty:
+                fig, ax = plt.subplots(figsize=(5, 3.5))
+                sns.lineplot(data=df_effort, x='date', y='effort', marker='o', color=theme.ACCENT, ax=ax)
+                ax.set_ylim(0, 10.5)
+                ax.set_ylabel("Effort (1-10)")
+                ax.set_xlabel("")
+                ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
+                plt.xticks(rotation=45)
+                st.pyplot(fig, use_container_width=True)
+            else:
+                st.info("No effort data logged.")
 
-        if not df_effort.empty:
-            fig, ax = plt.subplots(figsize=(5, 3.5))
-            sns.lineplot(data=df_effort, x='date', y='effort', marker='o', color='#FF5733', ax=ax)
-            ax.set_ylim(0, 10.5)
-            ax.set_ylabel("Effort (1-10)")
-            ax.set_xlabel("")
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
-            plt.xticks(rotation=45)
-            st.pyplot(fig, use_container_width=True)
-        else:
-            st.info("No effort data logged.")
+        with col2:
+            st.subheader("📈 Grade Progression")
+            # -1 encodes "no grade logged that day" (see clean_data), so those rows are excluded here
+            df_gym = df_analytics[df_analytics['gym_numeric'] != -1].sort_values(by='date')
+            df_moonboard = df_analytics[df_analytics['moonboard_numeric'] != -1].sort_values(by='date')
 
-    with col2:
-        st.subheader("📈 Grade Progression")
-        # -1 encodes "no grade logged that day" (see clean_data), so those rows are excluded here
-        df_gym = df_analytics[df_analytics['gym_numeric'] != -1].sort_values(by='date')
-        df_moonboard = df_analytics[df_analytics['moonboard_numeric'] != -1].sort_values(by='date')
+            if not df_gym.empty or not df_moonboard.empty:
+                fig_grades, ax1 = plt.subplots(figsize=(5, 3.5))
+                gym_rev_map = {v: k for k, v in PipelineConfig.GYM_MAPPING.items()}
+                mb_rev_map = {v: k for k, v in PipelineConfig.MOONBOARD_MAPPING.items()}
 
-        if not df_gym.empty or not df_moonboard.empty:
-            fig_grades, ax1 = plt.subplots(figsize=(5, 3.5))
+                # Gym grade and Moonboard grade use different scales, so they
+                # share the x-axis (date) but get independent y-axes
+                color1 = theme.GRADE_COLORS["Blue"]
+                ax1.set_ylabel('Gym Color', color=color1)
+                if not df_gym.empty:
+                    sns.lineplot(data=df_gym, x='date', y='gym_numeric', marker='s', color=color1, ax=ax1, label='Gym Grade')
+
+                ax1.set_yticks(list(gym_rev_map.keys()))
+                ax1.set_yticklabels(list(gym_rev_map.values()))
+                ax1.tick_params(axis='y', labelcolor=color1)
+
+                ax2 = ax1.twinx()
+                color2 = theme.GRADE_COLORS["Purple"]
+                ax2.set_ylabel('Moonboard (V)', color=color2)
+                if not df_moonboard.empty:
+                    sns.lineplot(data=df_moonboard, x='date', y='moonboard_numeric', marker='^', color=color2, ax=ax2, label='Moonboard')
+
+                ax2.set_yticks(list(mb_rev_map.keys()))
+                ax2.set_yticklabels(list(mb_rev_map.values()))
+                ax2.tick_params(axis='y', labelcolor=color2)
+
+                ax1.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
+                ax1.set_xlabel("")
+                plt.xticks(rotation=45)
+
+                # Merge both axes' legends into a single legend box
+                lines_1, labels_1 = ax1.get_legend_handles_labels()
+                lines_2, labels_2 = ax2.get_legend_handles_labels()
+                ax2.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', fontsize='small')
+
+                if ax1.get_legend() is not None:
+                    ax1.get_legend().remove()
+
+                st.pyplot(fig_grades, use_container_width=True)
+            else:
+                st.info("No grade data logged.")
+
+        with col3:
+            st.subheader("📊 Distribution")
+            df_dist = df_analytics[df_analytics['category'] != 'Rest']
+
+            if not df_dist.empty:
+                fig_dist, ax_dist = plt.subplots(figsize=(5, 3.5))
+                category_counts = df_dist['category'].value_counts()
+
+                ax_dist.pie(
+                    category_counts,
+                    labels=category_counts.index,
+                    autopct='%1.1f%%',
+                    startangle=140,
+                    colors=[theme.CATEGORY_COLORS.get(cat, theme.CATEGORY_FALLBACK_COLOR) for cat in category_counts.index],
+                    wedgeprops={'edgecolor': theme.BASALT, 'linewidth': 1.5}
+                )
+                ax_dist.axis('equal')
+                st.pyplot(fig_dist, use_container_width=True)
+            else:
+                st.info("No training sessions logged.")
+
+        st.markdown("---")
+        st.subheader("🎯 Advanced Analytics")
+
+        col4, col5 = st.columns(2)
+
+        with col4:
+            st.markdown("**📉 Acute:Chronic Workload Ratio**")
+            # Computed over the full training history (not just the selected
+            # range)
+            acwr_df = compute_acwr(df_past)
+            acwr_windowed = acwr_df[(acwr_df.index.date >= start_date) & (acwr_df.index.date <= end_date)]
+
+            if not acwr_windowed.empty and acwr_windowed['acwr'].notna().any():
+                fig_acwr, ax_acwr = plt.subplots(figsize=(5, 3.5))
+                band_top = max(2.0, acwr_windowed['acwr'].max(skipna=True) + 0.2)
+                ax_acwr.axhspan(0.8, 1.3, color=theme.ACWR_BAND_COLORS["sweet_spot"], alpha=0.15, label='Sweet spot')
+                ax_acwr.axhspan(1.3, 1.5, color=theme.ACWR_BAND_COLORS["caution"], alpha=0.15, label='Caution')
+                ax_acwr.axhspan(1.5, band_top, color=theme.ACWR_BAND_COLORS["high_risk"], alpha=0.15, label='High risk')
+                sns.lineplot(data=acwr_windowed, x=acwr_windowed.index, y='acwr', marker='o', color=theme.ACCENT, ax=ax_acwr)
+                ax_acwr.set_ylabel("ACWR")
+                ax_acwr.set_xlabel("")
+                ax_acwr.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
+                plt.xticks(rotation=45)
+                ax_acwr.legend(loc='upper left', fontsize='x-small')
+                st.pyplot(fig_acwr, use_container_width=True)
+                st.caption("Recent (7-day) vs. baseline (28-day) training load. Needs a few weeks of consistent logging to be meaningful.")
+            else:
+                st.info("Not enough training history yet to compute ACWR.")
+
+        with col5:
+            st.markdown("**🎯 Effort vs. Grade Yield**")
+            df_yield = df_analytics.dropna(subset=['effort'])
+            df_gym_yield = df_yield[df_yield['gym_numeric'] != -1]
+            df_mb_yield = df_yield[df_yield['moonboard_numeric'] != -1]
+
+            if not df_gym_yield.empty or not df_mb_yield.empty:
+                fig_yield, ax_yield = plt.subplots(figsize=(5, 3.5))
+                if not df_gym_yield.empty:
+                    ax_yield.scatter(df_gym_yield['effort'], df_gym_yield['gym_numeric'], color=theme.GRADE_COLORS["Blue"], label='Gym', alpha=0.7)
+                if not df_mb_yield.empty:
+                    ax_yield.scatter(df_mb_yield['effort'], df_mb_yield['moonboard_numeric'], color=theme.GRADE_COLORS["Purple"], label='Moonboard', alpha=0.7)
+                ax_yield.set_xlabel("Effort (1-10)")
+                ax_yield.set_ylabel("Max grade (encoded)")
+                ax_yield.legend(loc='upper left', fontsize='small')
+                st.pyplot(fig_yield, use_container_width=True)
+            else:
+                st.info("No grade data logged in this range.")
+
+        st.markdown("**🏆 Peak Performance Highlights**")
+        top_sessions = get_peak_sessions(df_analytics, n=3)
+
+        if not top_sessions.empty:
             gym_rev_map = {v: k for k, v in PipelineConfig.GYM_MAPPING.items()}
             mb_rev_map = {v: k for k, v in PipelineConfig.MOONBOARD_MAPPING.items()}
+            highlight_cols = st.columns(len(top_sessions))
 
-            # Gym grade and Moonboard grade use different scales, so they
-            # share the x-axis (date) but get independent y-axes
-            color1 = '#2E86C1'
-            ax1.set_ylabel('Gym Color', color=color1)
-            if not df_gym.empty:
-                sns.lineplot(data=df_gym, x='date', y='gym_numeric', marker='s', color=color1, ax=ax1, label='Gym Grade')
-
-            ax1.set_yticks(list(gym_rev_map.keys()))
-            ax1.set_yticklabels(list(gym_rev_map.values()))
-            ax1.tick_params(axis='y', labelcolor=color1)
-
-            ax2 = ax1.twinx()
-            color2 = '#8E44AD'
-            ax2.set_ylabel('Moonboard (V)', color=color2)
-            if not df_moonboard.empty:
-                sns.lineplot(data=df_moonboard, x='date', y='moonboard_numeric', marker='^', color=color2, ax=ax2, label='Moonboard')
-
-            ax2.set_yticks(list(mb_rev_map.keys()))
-            ax2.set_yticklabels(list(mb_rev_map.values()))
-            ax2.tick_params(axis='y', labelcolor=color2)
-
-            ax1.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
-            ax1.set_xlabel("")
-            plt.xticks(rotation=45)
-
-            # Merge both axes' legends into a single legend box
-            lines_1, labels_1 = ax1.get_legend_handles_labels()
-            lines_2, labels_2 = ax2.get_legend_handles_labels()
-            ax2.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', fontsize='small')
-
-            if ax1.get_legend() is not None:
-                ax1.get_legend().remove()
-
-            st.pyplot(fig_grades, use_container_width=True)
+            for col, (_, session) in zip(highlight_cols, top_sessions.iterrows()):
+                with col:
+                    st.markdown(f"**{session['date'].strftime('%d/%m/%Y')}**")
+                    st.caption(session['category'])
+                    if session['gym_numeric'] != -1:
+                        st.write(f"🧗 Gym: {gym_rev_map.get(int(session['gym_numeric']), '-')}")
+                    if session['moonboard_numeric'] != -1:
+                        st.write(f"🪨 Moonboard: {mb_rev_map.get(int(session['moonboard_numeric']), '-')}")
+                    if pd.notna(session['effort']):
+                        st.write(f"🔥 Effort: {int(session['effort'])}/10")
         else:
-            st.info("No grade data logged.")
-
-    with col3:
-        st.subheader("📊 Distribution")
-        df_dist = df_analytics[df_analytics['category'] != 'Rest']
-
-        if not df_dist.empty:
-            fig_dist, ax_dist = plt.subplots(figsize=(5, 3.5))
-            category_counts = df_dist['category'].value_counts()
-
-            ax_dist.pie(
-                category_counts,
-                labels=category_counts.index,
-                autopct='%1.1f%%',
-                startangle=140,
-                colors=sns.color_palette('viridis', n_colors=len(category_counts)),
-                wedgeprops={'edgecolor': 'white', 'linewidth': 1.5}
-            )
-            ax_dist.axis('equal')
-            st.pyplot(fig_dist, use_container_width=True)
-        else:
-            st.info("No training sessions logged.")
-    st.markdown("---")
-    st.subheader("🎯 Advanced Analytics")
-
-    col4, col5 = st.columns(2)
-
-    with col4:
-        st.markdown("**📉 Acute:Chronic Workload Ratio**")
-        # Computed over the full training history (not just the selected
-        # range)
-        acwr_df = compute_acwr(df_past)
-        acwr_windowed = acwr_df[(acwr_df.index.date >= start_date) & (acwr_df.index.date <= end_date)]
-
-        if not acwr_windowed.empty and acwr_windowed['acwr'].notna().any():
-            fig_acwr, ax_acwr = plt.subplots(figsize=(5, 3.5))
-            band_top = max(2.0, acwr_windowed['acwr'].max(skipna=True) + 0.2)
-            ax_acwr.axhspan(0.8, 1.3, color='#28B463', alpha=0.15, label='Sweet spot')
-            ax_acwr.axhspan(1.3, 1.5, color='#F5B041', alpha=0.15, label='Caution')
-            ax_acwr.axhspan(1.5, band_top, color='#E74C3C', alpha=0.15, label='High risk')
-            sns.lineplot(data=acwr_windowed, x=acwr_windowed.index, y='acwr', marker='o', color='#2E86C1', ax=ax_acwr)
-            ax_acwr.set_ylabel("ACWR")
-            ax_acwr.set_xlabel("")
-            ax_acwr.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
-            plt.xticks(rotation=45)
-            ax_acwr.legend(loc='upper left', fontsize='x-small')
-            st.pyplot(fig_acwr, use_container_width=True)
-            st.caption("Recent (7-day) vs. baseline (28-day) training load. Needs a few weeks of consistent logging to be meaningful.")
-        else:
-            st.info("Not enough training history yet to compute ACWR.")
-
-    with col5:
-        st.markdown("**🎯 Effort vs. Grade Yield**")
-        df_yield = df_analytics.dropna(subset=['effort'])
-        df_gym_yield = df_yield[df_yield['gym_numeric'] != -1]
-        df_mb_yield = df_yield[df_yield['moonboard_numeric'] != -1]
-
-        if not df_gym_yield.empty or not df_mb_yield.empty:
-            fig_yield, ax_yield = plt.subplots(figsize=(5, 3.5))
-            if not df_gym_yield.empty:
-                ax_yield.scatter(df_gym_yield['effort'], df_gym_yield['gym_numeric'], color='#2E86C1', label='Gym', alpha=0.7)
-            if not df_mb_yield.empty:
-                ax_yield.scatter(df_mb_yield['effort'], df_mb_yield['moonboard_numeric'], color='#8E44AD', label='Moonboard', alpha=0.7)
-            ax_yield.set_xlabel("Effort (1-10)")
-            ax_yield.set_ylabel("Max grade (encoded)")
-            ax_yield.legend(loc='upper left', fontsize='small')
-            st.pyplot(fig_yield, use_container_width=True)
-        else:
-            st.info("No grade data logged in this range.")
-
-    st.markdown("**🏆 Peak Performance Highlights**")
-    top_sessions = get_peak_sessions(df_analytics, n=3)
-
-    if not top_sessions.empty:
-        gym_rev_map = {v: k for k, v in PipelineConfig.GYM_MAPPING.items()}
-        mb_rev_map = {v: k for k, v in PipelineConfig.MOONBOARD_MAPPING.items()}
-        highlight_cols = st.columns(len(top_sessions))
-
-        for col, (_, session) in zip(highlight_cols, top_sessions.iterrows()):
-            with col:
-                st.markdown(f"**{session['date'].strftime('%d/%m/%Y')}**")
-                st.caption(session['category'])
-                if session['gym_numeric'] != -1:
-                    st.write(f"🧗 Gym: {gym_rev_map.get(int(session['gym_numeric']), '-')}")
-                if session['moonboard_numeric'] != -1:
-                    st.write(f"🪨 Moonboard: {mb_rev_map.get(int(session['moonboard_numeric']), '-')}")
-                if pd.notna(session['effort']):
-                    st.write(f"🔥 Effort: {int(session['effort'])}/10")
+            st.info("No sessions to highlight in this range yet.")
     else:
-        st.info("No sessions to highlight in this range yet.")
-else:
-    st.warning("Please select an end date to view analytics.")
-
-# --- EXERCISE LIBRARY ---
-st.markdown("---")
-st.header("🏋️ Exercise Library")
-st.markdown("*Click any exercise below to edit or delete it.*")
+        st.warning("Please select an end date to view analytics.")
 
 
 @st.dialog("➕ New Exercise")
@@ -640,32 +650,35 @@ def edit_exercise_modal(exercise_data):
                 st.rerun()
 
 
-if st.button("➕ Add New Exercise"):
-    add_exercise_modal()
+with tab_library:
+    st.markdown("*Click any exercise below to edit or delete it.*")
 
-_browse_cols = ['name', 'type', 'sets', 'reps', 'time', 'rest', 'comments']
-_browse_cols = [c for c in _browse_cols if c in df_dict.columns]
+    if st.button("➕ Add New Exercise"):
+        add_exercise_modal()
 
-phase_tabs = st.tabs(PipelineConfig.ALLOWED_PHASES)
-for tab, phase in zip(phase_tabs, PipelineConfig.ALLOWED_PHASES):
-    with tab:
-        phase_df = df_dict[df_dict['phase'] == phase].reset_index(drop=True)
-        if phase_df.empty:
-            st.info(f"No exercises tagged '{phase}' yet.")
-            continue
+    _browse_cols = ['name', 'type', 'sets', 'reps', 'time', 'rest', 'comments']
+    _browse_cols = [c for c in _browse_cols if c in df_dict.columns]
 
-        event = st.dataframe(
-            phase_df[_browse_cols],
-            use_container_width=True,
-            hide_index=True,
-            on_select="rerun",
-            selection_mode="single-row",
-            key=f"exercise_browse_{phase}",
-        )
+    phase_tabs = st.tabs(PipelineConfig.ALLOWED_PHASES)
+    for tab, phase in zip(phase_tabs, PipelineConfig.ALLOWED_PHASES):
+        with tab:
+            phase_df = df_dict[df_dict['phase'] == phase].reset_index(drop=True)
+            if phase_df.empty:
+                st.info(f"No exercises tagged '{phase}' yet.")
+                continue
 
-        selected_rows = event.selection.rows
-        selection_signature = f"{phase}:{selected_rows}"
+            event = st.dataframe(
+                phase_df[_browse_cols],
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key=f"exercise_browse_{phase}",
+            )
 
-        if selected_rows and st.session_state.get("last_exercise_selection") != selection_signature:
-            st.session_state.last_exercise_selection = selection_signature
-            edit_exercise_modal(phase_df.iloc[selected_rows[0]])
+            selected_rows = event.selection.rows
+            selection_signature = f"{phase}:{selected_rows}"
+
+            if selected_rows and st.session_state.get("last_exercise_selection") != selection_signature:
+                st.session_state.last_exercise_selection = selection_signature
+                edit_exercise_modal(phase_df.iloc[selected_rows[0]])

@@ -1,0 +1,114 @@
+"""
+Design tokens for the Climbing Training Tracker.
+
+Single source of truth for every color, font, and chart template used
+across app.py, so nothing is hardcoded inline more than once. The palette
+is built around the gym's own grade-color scale (PipelineConfig.GYM_MAPPING)
+so hold colors read the same way here as they do on the wall.
+"""
+
+import plotly.graph_objects as go
+
+# --- Base palette ---
+BASALT = "#1A1918"       # page background
+CHALK_BAG = "#242220"    # card / surface background
+ROPE = "#3A3733"         # borders, dividers
+CHALK = "#EDE8DF"        # primary text
+STONE = "#9C948A"        # secondary / muted text
+ACCENT = "#E8B923"       # primary interactive color (chalk-tape yellow)
+
+# --- Grade scale (mirrors PipelineConfig.GYM_MAPPING keys) ---
+GRADE_COLORS = {
+    "White": "#F5F1E8",
+    "Yellow": "#E8B923",
+    "Green": "#4C9A2A",
+    "Blue": "#3E86D6",
+    "Red": "#E0483A",
+    "Purple": "#9B5DE0",
+    "Black": "#4A4540",
+}
+
+# --- Training category colors (deliberately distinct from GRADE_COLORS) ---
+CATEGORY_COLORS = {
+    "Strength": "#E4622D",
+    "Stamina": "#2FA89A",
+    "Technique": "#C2437D",
+    "Free": "#6C63FF",
+    "Rest": "#6B6560",
+}
+CATEGORY_FALLBACK_COLOR = "#5A564F"
+
+# --- ACWR risk bands (reuse the grade scale's green/yellow/red) ---
+ACWR_BAND_COLORS = {
+    "sweet_spot": GRADE_COLORS["Green"],
+    "caution": GRADE_COLORS["Yellow"],
+    "high_risk": GRADE_COLORS["Red"],
+}
+
+# --- Type ---
+FONT_DISPLAY = "'Oswald', sans-serif"
+FONT_BODY = "'Inter', sans-serif"
+FONT_MONO = "'JetBrains Mono', monospace"
+
+# --- Shared Plotly template ---
+PLOTLY_TEMPLATE = go.layout.Template(
+    layout=go.Layout(
+        paper_bgcolor=CHALK_BAG,
+        plot_bgcolor=CHALK_BAG,
+        font=dict(family=FONT_BODY, color=CHALK, size=13),
+        title=dict(font=dict(family=FONT_DISPLAY, color=CHALK, size=18)),
+        xaxis=dict(
+            gridcolor=ROPE, zerolinecolor=ROPE, tickfont=dict(family=FONT_MONO, color=STONE),
+            linecolor=ROPE,
+        ),
+        yaxis=dict(
+            gridcolor=ROPE, zerolinecolor=ROPE, tickfont=dict(family=FONT_MONO, color=STONE),
+            linecolor=ROPE,
+        ),
+        legend=dict(font=dict(family=FONT_BODY, color=CHALK), bgcolor="rgba(0,0,0,0)"),
+        colorway=[ACCENT, GRADE_COLORS["Blue"], GRADE_COLORS["Purple"], GRADE_COLORS["Green"]],
+        margin=dict(l=10, r=10, t=40, b=10),
+    )
+)
+
+
+def inject_global_css() -> str:
+    """Google Fonts import + base typography/spacing rules for the app.
+    Return value is meant to be passed straight to st.markdown(unsafe_allow_html=True).
+    """
+    return f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap');
+
+html, body, [class*="css"] {{
+    font-family: {FONT_BODY};
+}}
+
+h1, h2, h3 {{
+    font-family: {FONT_DISPLAY} !important;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}}
+
+[data-testid="stMetricValue"] {{
+    font-family: {FONT_MONO} !important;
+}}
+
+[data-testid="stMetricLabel"] {{
+    font-family: {FONT_BODY} !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.75rem !important;
+}}
+
+.stTabs [data-baseweb="tab"] {{
+    font-family: {FONT_DISPLAY};
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}}
+
+code, .stCode, .grade-chip-label {{
+    font-family: {FONT_MONO} !important;
+}}
+</style>
+"""

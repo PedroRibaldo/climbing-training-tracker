@@ -494,6 +494,61 @@ def compute_acwr(df_past: pd.DataFrame, acute_window: int = 7, chronic_window: i
     })
 
 
+def compute_kpis(df_past: pd.DataFrame) -> dict:
+    """Snapshot KPIs for the top-of-page summary strip.
+
+    Returns a dict with:
+        streak: consecutive days up to the most recently logged day that
+            have a non-Rest session (0 if none)
+        sessions_this_week: non-Rest sessions logged since the most
+            recent Monday
+        acwr_current / acwr_delta: latest ACWR value and its change from
+            the previous day with a computable ACWR (None if not enough
+            training history yet)
+        days_since_last: days since the most recently logged session of
+            any category (None if nothing has been logged)
+    """
+    empty_result = {
+        'streak': 0, 'sessions_this_week': 0,
+        'acwr_current': None, 'acwr_delta': None, 'days_since_last': None,
+    }
+
+    dated = df_past.dropna(subset=['date']) if not df_past.empty else df_past
+    if dated.empty:
+        return empty_result
+
+    today = pd.to_datetime('today').normalize()
+    last_date = dated['date'].max().normalize()
+
+    week_start = today - pd.Timedelta(days=today.weekday())
+    sessions_this_week = dated[
+        (dated['date'] >= week_start) & (dated['category'] != 'Rest')
+    ].shape[0]
+
+    non_rest_days = set(dated[dated['category'] != 'Rest']['date'].dt.normalize())
+    streak = 0
+    cursor = last_date
+    while cursor in non_rest_days:
+        streak += 1
+        cursor -= pd.Timedelta(days=1)
+
+    acwr_df = compute_acwr(df_past)
+    acwr_series = acwr_df['acwr'].dropna() if not acwr_df.empty else pd.Series(dtype=float)
+    acwr_current = float(acwr_series.iloc[-1]) if not acwr_series.empty else None
+    acwr_delta = (
+        float(acwr_series.iloc[-1] - acwr_series.iloc[-2])
+        if len(acwr_series) >= 2 else None
+    )
+
+    return {
+        'streak': streak,
+        'sessions_this_week': int(sessions_this_week),
+        'acwr_current': acwr_current,
+        'acwr_delta': acwr_delta,
+        'days_since_last': int((today - last_date).days),
+    }
+
+
 def get_peak_sessions(df: pd.DataFrame, n: int = 3) -> pd.DataFrame:
     """Rank sessions by a "how strong was this session" composite score and
     return the top n, with effort as a tiebreaker. Rest days are excluded.
