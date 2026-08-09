@@ -412,27 +412,27 @@ with tab_calendar:
         },
         "initialView": "dayGridMonth",
     }
+    if st.session_state.get("calendar_initial_date"):
+        calendar_options["initialDate"] = st.session_state.calendar_initial_date
+    
+    cal = calendar(
+        events=calendar_events, options=calendar_options, callbacks=['dateClick'],
+        key=f"calendar_{st.session_state.get('calendar_nonce', 0)}",
+    )
 
-    cal = calendar(events=calendar_events, options=calendar_options, callbacks=['dateClick'])
-
-    # Handle a day-click by opening the modal for that date. The "last_click_event"
-    # guard prevents the modal from immediately reopening on every rerun that
-    # Streamlit triggers after the dialog is dismissed.
     if cal.get("callback") == "dateClick":
-        current_click_event = str(cal)
+        raw_clicked_date = str(cal["dateClick"]["date"])
+        clean_clicked_date = raw_clicked_date.split("T")[0]
 
-        if st.session_state.get("last_click_event") != current_click_event:
-            st.session_state.last_click_event = current_click_event
+        existing_session = df_all_calendar[df_all_calendar['date_str'] == clean_clicked_date]
 
-            raw_clicked_date = str(cal["dateClick"]["date"])
-            clean_clicked_date = raw_clicked_date.split("T")[0]
+        st.session_state.calendar_nonce = st.session_state.get("calendar_nonce", 0) + 1
+        st.session_state.calendar_initial_date = clean_clicked_date
 
-            existing_session = df_all_calendar[df_all_calendar['date_str'] == clean_clicked_date]
-
-            if not existing_session.empty:
-                edit_session_modal(existing_session.iloc[0], is_new=False)
-            else:
-                edit_session_modal(_make_blank_session(clean_clicked_date), is_new=True)
+        if not existing_session.empty:
+            edit_session_modal(existing_session.iloc[0], is_new=False)
+        else:
+            edit_session_modal(_make_blank_session(clean_clicked_date), is_new=True)
 
 
 with tab_analytics:
