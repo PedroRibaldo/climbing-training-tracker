@@ -19,7 +19,7 @@ from streamlit_calendar import calendar
 from data_pipeline import load_clean_data, update_session, add_session, delete_session, add_exercise, update_exercise, delete_exercise, compute_acwr, compute_kpis, get_peak_sessions, PipelineConfig
 from training_plan import (
     PlanConfig, preview_plan, create_goal_and_plan, get_active_goal, regenerate_plan, abandon_goal,
-    check_and_update_goal_completion,
+    check_and_update_goal_completion, select_exercises_for_day,
 )
 import theme
 
@@ -130,6 +130,16 @@ with kpi_cols[3]:
 
 
 # --- EDIT/CREATE SESSION MODAL (POP-UP) ---
+def _category_exercise_pool(category, df_dict):
+    """Every During exercise select_exercises_for_day would include for
+    this category (mandatory + category-tagged, excluding anything
+    flagged exclude_from_plan) - or none at all for Free/Rest, which
+    can't be pre-planned."""
+    if category in ('Free', 'Rest'):
+        return []
+    return select_exercises_for_day(category, df_dict, {})['during']
+
+
 def _render_session_edit_form(session_data, is_new=False, on_saved=None):
     """Renders the actual session form (fields + save/delete buttons).
 
@@ -174,7 +184,7 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
         if is_new:
             # Smart State Injection: Fetch "Before" and "After" from the most recent past session
             default_before = []
-            default_during = [] # Always start blank for climbing
+            default_during = _category_exercise_pool(new_cat, df_dict)
             default_after = []
 
             if not df_past.empty:
@@ -194,6 +204,12 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
             default_during = [ex for ex in current_list if ex in exercises_during]
             default_after = [ex for ex in current_list if ex in exercises_after]
 
+        during_key = f"ex_during_{session_key}"
+        prev_cat_key = f"prev_cat_{session_key}"
+        if prev_cat_key in st.session_state and st.session_state[prev_cat_key] != new_cat:
+            st.session_state[during_key] = _category_exercise_pool(new_cat, df_dict)
+        st.session_state[prev_cat_key] = new_cat
+
         # Render Mobile Tabs
         tab1, tab2, tab3 = st.tabs(["🏃 Warm-up", "🧗 Climbing", "🏋️ Cool-down"])
 
@@ -205,7 +221,7 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
         with tab2:
             selected_during = st.multiselect(
                 "During", options=exercises_during, default=default_during,
-                key=f"ex_during_{session_key}", label_visibility="collapsed"
+                key=during_key, label_visibility="collapsed"
             )
         with tab3:
             selected_after = st.multiselect(
