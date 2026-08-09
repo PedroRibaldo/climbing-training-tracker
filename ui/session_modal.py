@@ -177,7 +177,14 @@ def _render_session_edit_form(
                     st.rerun()
 
 
-@st.dialog("Session details", icon=":material/edit:", on_dismiss="rerun")
+def _reset_delete_confirmation():
+    """Clears any pending session-delete confirmation, so a modal dismissed
+    via the X/backdrop/ESC (instead of Cancel) doesn't reopen with the
+    warning still showing."""
+    st.session_state.pop('confirm_delete_session_id', None)
+
+
+@st.dialog("Session details", icon=":material/edit:", on_dismiss=_reset_delete_confirmation)
 def edit_session_modal(
     session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
     refresh_data, is_new=False,
@@ -197,7 +204,7 @@ def _advance_due_carousel():
     st.rerun()
 
 
-@st.dialog("Catch up on missed sessions", icon=":material/schedule:")
+@st.dialog("Catch up on missed sessions", icon=":material/schedule:", on_dismiss=_reset_delete_confirmation)
 def due_sessions_carousel(df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data):
     """Auto-opened on page load when past sessions have no effort logged.
     Saving, deleting, or skipping the current one all advance
