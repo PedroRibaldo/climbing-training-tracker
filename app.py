@@ -24,14 +24,14 @@ from training_plan import (
 import theme
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Climbing Training Tracker", page_icon="🧗", layout="wide")
+st.set_page_config(page_title="Climbing Training Tracker", page_icon=":material/terrain:", layout="wide")
 
-st.markdown(theme.inject_global_css(), unsafe_allow_html=True)
+st.html(theme.inject_global_css())
 
 # --- CUSTOM CSS FOR CALENDAR STYLING ---
 # Centers the day number over each cell and makes it legible against the
 # background color used for that day's training category (see theme.CATEGORY_COLORS).
-st.markdown(f"""
+st.html(f"""
 <style>
 .fc-daygrid-day-frame {{
     position: relative !important;
@@ -62,6 +62,17 @@ st.markdown(f"""
 .fc-bg-event {{
     opacity: 0.85 !important;
 }}
+.fc-daygrid-day-frame {{
+    cursor: pointer;
+}}
+@media (prefers-reduced-motion: no-preference) {{
+    .fc-daygrid-day-frame {{
+        transition: filter 150ms ease;
+    }}
+    .fc-daygrid-day-frame:hover {{
+        filter: brightness(1.15);
+    }}
+}}
 /* The calendar is a custom JS component that measures its own height and
    reports it back to Streamlit. Streamlit's tabs are purely client-side
    (switching tabs never reruns the Python script), so if a script rerun
@@ -73,7 +84,7 @@ iframe[data-testid="stCustomComponentV1"] {{
     min-height: 650px !important;
 }}
 </style>
-""", unsafe_allow_html=True)
+""")
 
 # --- DATA LOADING ---
 @st.cache_data
@@ -112,21 +123,17 @@ else:
 
 
 # --- HEADER + KPI STRIP ---
-st.title("🧗 Climbing Training")
+st.title(":material/terrain: Climbing training")
 
 kpis = compute_kpis(df_past)
-kpi_cols = st.columns(4)
-with kpi_cols[0]:
-    st.metric("Current Streak", f"{kpis['streak']} d")
-with kpi_cols[1]:
-    st.metric("This Week", kpis['sessions_this_week'])
-with kpi_cols[2]:
+with st.container(horizontal=True):
+    st.metric(":material/local_fire_department: Current streak", f"{kpis['streak']} d", border=True)
+    st.metric(":material/date_range: This week", kpis['sessions_this_week'], border=True)
     acwr_value = "–" if kpis['acwr_current'] is None else f"{kpis['acwr_current']:.2f}"
     acwr_delta = None if kpis['acwr_delta'] is None else f"{kpis['acwr_delta']:+.2f}"
-    st.metric("ACWR", acwr_value, delta=acwr_delta, delta_color="inverse")
-with kpi_cols[3]:
+    st.metric(":material/monitoring: ACWR", acwr_value, delta=acwr_delta, delta_color="inverse", border=True)
     since_last = "–" if kpis['days_since_last'] is None else f"{kpis['days_since_last']} d"
-    st.metric("Since Last Session", since_last)
+    st.metric(":material/schedule: Since last session", since_last, border=True)
 
 
 # --- EDIT/CREATE SESSION MODAL (POP-UP) ---
@@ -164,15 +171,15 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
             new_cat = st.selectbox("Category", cat_opts, index=cat_opts.index(current_cat))
 
         current_effort = None if pd.isna(session_data['effort']) else int(session_data['effort'])
-        new_effort = st.number_input("Effort Scale (1-10)", min_value=1, max_value=10, value=current_effort, step=1)
+        new_effort = st.number_input("Effort (1-10)", min_value=1, max_value=10, value=current_effort, step=1)
 
         gym_opts = [""] + list(PipelineConfig.GYM_MAPPING.keys())
         current_gym = session_data['gym_grade'] if pd.notna(session_data['gym_grade']) and session_data['gym_grade'] in gym_opts else ""
-        new_gym = st.selectbox("Max Gym Grade", gym_opts, index=gym_opts.index(current_gym))
+        new_gym = st.selectbox("Max gym grade", gym_opts, index=gym_opts.index(current_gym))
 
         mb_opts = [""] + list(PipelineConfig.MOONBOARD_MAPPING.keys())
         current_mb = session_data['moonboard_grade'] if pd.notna(session_data['moonboard_grade']) and session_data['moonboard_grade'] in mb_opts else ""
-        new_mb = st.selectbox("Max Moonboard Grade", mb_opts, index=mb_opts.index(current_mb))
+        new_mb = st.selectbox("Max Moonboard grade", mb_opts, index=mb_opts.index(current_mb))
 
     with st.container(border=True):
         # 2. Exercises
@@ -211,7 +218,9 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
         st.session_state[prev_cat_key] = new_cat
 
         # Render Mobile Tabs
-        tab1, tab2, tab3 = st.tabs(["🏃 Warm-up", "🧗 Climbing", "🏋️ Cool-down"])
+        tab1, tab2, tab3 = st.tabs([
+            ":material/directions_run: Warm-up", ":material/terrain: Climbing", ":material/self_improvement: Cool-down",
+        ])
 
         with tab1:
             selected_before = st.multiselect(
@@ -242,7 +251,7 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
 
     # 3. Save & delete actions
     if is_new:
-        if st.button("💾 Log New Session", use_container_width=True):
+        if st.button("Log new session", icon=":material/save:", type="primary", width="stretch"):
             new_session_data = {
                 'Date': session_data['date'].strftime('%d/%m/%Y'),
                 'Category': new_cat,
@@ -259,7 +268,7 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
         session_id = int(session_data['id'])
         col_save, col_del = st.columns(2)
         with col_save:
-            if st.button("💾 Save Changes", use_container_width=True):
+            if st.button("Save changes", icon=":material/save:", type="primary", width="stretch"):
                 updated_data = {
                     'Category': new_cat,
                     'Effort Scale': new_effort,
@@ -272,7 +281,7 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
                 if success:
                     _finish()
         with col_del:
-            if st.button("🗑️ Delete Session", use_container_width=True):
+            if st.button("Delete session", icon=":material/delete:", width="stretch", key=f"danger_delete_session_{session_id}"):
                 st.session_state.confirm_delete_session_id = session_id
 
         # Two-step delete confirmation, mirroring the exercise delete pattern
@@ -280,18 +289,18 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
             st.warning("Delete this session permanently? This also removes its logged exercises.")
             col_yes, col_no = st.columns(2)
             with col_yes:
-                if st.button("⚠️ Yes, delete", use_container_width=True, key=f"confirm_del_session_yes_{session_id}"):
+                if st.button("Yes, delete", icon=":material/warning:", width="stretch", key=f"danger_confirm_del_session_yes_{session_id}"):
                     with st.spinner("Deleting…"):
                         success = delete_session(session_id)
                     if success:
                         _finish()
             with col_no:
-                if st.button("Cancel", use_container_width=True, key=f"confirm_del_session_no_{session_id}"):
+                if st.button("Cancel", icon=":material/close:", width="stretch", key=f"confirm_del_session_no_{session_id}"):
                     st.session_state.pop('confirm_delete_session_id', None)
                     st.rerun()
 
 
-@st.dialog("✏️ Session Details")
+@st.dialog("Session details", icon=":material/edit:")
 def edit_session_modal(session_data, is_new=False):
     """Pop-up form for viewing/editing an existing session, or logging a
     new one when is_new=True
@@ -305,7 +314,7 @@ def _advance_due_carousel():
     st.rerun()
 
 
-@st.dialog("⏰ Catch Up on Missed Sessions")
+@st.dialog("Catch up on missed sessions", icon=":material/schedule:")
 def due_sessions_carousel():
     """Auto-opened on page load when past sessions have no effort logged.
     Saving, deleting, or skipping the current one all advance
@@ -327,13 +336,13 @@ def due_sessions_carousel():
 
     col_prev, col_mid, col_next = st.columns([1, 3, 1])
     with col_prev:
-        if st.button("◀", disabled=(idx == 0), use_container_width=True, key="due_carousel_prev"):
+        if st.button("", icon=":material/chevron_left:", disabled=(idx == 0), width="stretch", key="due_carousel_prev", help="Previous overdue session"):
             st.session_state.due_carousel_index -= 1
             st.rerun()
     with col_mid:
-        st.markdown(f"<p style='text-align:center'>Overdue session {idx + 1} of {len(queue)}</p>", unsafe_allow_html=True)
+        st.markdown(f"Overdue session {idx + 1} of {len(queue)}", text_alignment="center")
     with col_next:
-        if st.button("▶", disabled=(idx == len(queue) - 1), use_container_width=True, key="due_carousel_next"):
+        if st.button("", icon=":material/chevron_right:", disabled=(idx == len(queue) - 1), width="stretch", key="due_carousel_next", help="Next overdue session"):
             st.session_state.due_carousel_index += 1
             st.rerun()
 
@@ -343,10 +352,10 @@ def due_sessions_carousel():
 
     col_skip, col_dismiss = st.columns(2)
     with col_skip:
-        if st.button("⏭️ Remind Me Later", use_container_width=True, key="due_carousel_skip"):
+        if st.button("Remind me later", icon=":material/skip_next:", width="stretch", key="due_carousel_skip"):
             _advance_due_carousel()
     with col_dismiss:
-        if st.button("✖️ Dismiss All", use_container_width=True, key="due_carousel_dismiss_all"):
+        if st.button("Dismiss all", icon=":material/close:", width="stretch", key="due_carousel_dismiss_all"):
             st.session_state.due_carousel_index = len(queue)
             st.rerun()
 
@@ -382,11 +391,14 @@ if st.session_state.due_carousel_index < len(st.session_state.get("due_sessions_
 
 
 # --- TOP-LEVEL NAVIGATION ---
-tab_calendar, tab_analytics, tab_library, tab_goals = st.tabs(["📅 Calendar", "📊 Analytics", "🏋️ Exercise Library", "🎯 Goals"])
+tab_calendar, tab_analytics, tab_library, tab_goals = st.tabs([
+    ":material/calendar_month: Calendar", ":material/analytics: Analytics",
+    ":material/fitness_center: Exercise library", ":material/flag: Goals",
+])
 
 with tab_calendar:
-    st.markdown("*Click any colored session to edit it, or click a blank day to log a missed session.*")
-    st.markdown(theme.color_key_html(theme.CATEGORY_COLORS, title="Category Key"), unsafe_allow_html=True)
+    st.caption("Click any colored session to edit it, or click a blank day to log a missed session.")
+    st.html(theme.color_key_html(theme.CATEGORY_COLORS, title="Category key"))
 
     # Sessions are rendered as full-day background color blocks rather than
     # titled events, so the calendar reads like a training-day heatmap
@@ -440,7 +452,7 @@ with tab_analytics:
     last_month_date = today_date - pd.Timedelta(days=30)
 
     date_range = st.date_input(
-        "🗓️ Select Analytics Date Range",
+        ":material/date_range: Select analytics date range",
         value=(last_month_date, today_date),
         max_value=today_date
     )
@@ -454,7 +466,7 @@ with tab_analytics:
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.subheader("🔥 Training Intensity")
+            st.subheader(":material/local_fire_department: Training intensity")
             df_effort = df_analytics.dropna(subset=['effort']).sort_values(by='date')
 
             if not df_effort.empty:
@@ -462,12 +474,12 @@ with tab_analytics:
                 fig.update_traces(line_color=theme.ACCENT, marker=dict(color=theme.ACCENT, size=8))
                 fig.update_yaxes(title="Effort (1-10)", range=[0, 10.5])
                 fig.update_xaxes(title="", tickformat="%d/%m")
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig)
             else:
                 st.info("No effort data logged.")
 
         with col2:
-            st.subheader("📈 Grade Progression")
+            st.subheader(":material/trending_up: Grade progression")
             # -1 encodes "no grade logged that day" (see clean_data), so those rows are excluded here
             df_gym = df_analytics[df_analytics['gym_numeric'] != -1].sort_values(by='date')
             df_moonboard = df_analytics[df_analytics['moonboard_numeric'] != -1].sort_values(by='date')
@@ -502,12 +514,12 @@ with tab_analytics:
                     tickvals=list(mb_rev_map.keys()), ticktext=list(mb_rev_map.values()),
                 )
                 fig_grades.update_xaxes(title="", tickformat="%d/%m")
-                st.plotly_chart(fig_grades, use_container_width=True)
+                st.plotly_chart(fig_grades)
             else:
                 st.info("No grade data logged.")
 
         with col3:
-            st.subheader("📊 Distribution")
+            st.subheader(":material/pie_chart: Distribution")
             df_dist = df_analytics[df_analytics['category'] != 'Rest']
 
             if not df_dist.empty:
@@ -523,17 +535,16 @@ with tab_analytics:
                     textinfo='percent+label',
                     marker=dict(line=dict(color=theme.BASALT, width=1.5)),
                 )
-                st.plotly_chart(fig_dist, use_container_width=True)
+                st.plotly_chart(fig_dist)
             else:
                 st.info("No training sessions logged.")
 
-        st.markdown("---")
-        st.subheader("🎯 Advanced Analytics")
+        st.subheader(":material/query_stats: Advanced analytics")
 
         col4, col5 = st.columns(2)
 
         with col4:
-            st.markdown("**📉 Acute:Chronic Workload Ratio**")
+            st.markdown("**:material/monitoring: Acute:Chronic Workload Ratio**")
             # Computed over the full training history (not just the selected
             # range)
             acwr_df = compute_acwr(df_past)
@@ -560,13 +571,13 @@ with tab_analytics:
                 fig_acwr.update_layout(template=theme.PLOTLY_TEMPLATE, legend=dict(orientation='h', y=1.2, x=0))
                 fig_acwr.update_yaxes(title="ACWR", range=[0, band_top])
                 fig_acwr.update_xaxes(title="", type='date', tickformat="%d/%m")
-                st.plotly_chart(fig_acwr, use_container_width=True)
+                st.plotly_chart(fig_acwr)
                 st.caption("Recent (7-day) vs. baseline (28-day) training load. Needs a few weeks of consistent logging to be meaningful.")
             else:
                 st.info("Not enough training history yet to compute ACWR.")
 
         with col5:
-            st.markdown("**🎯 Effort vs. Grade Yield**")
+            st.markdown("**:material/scatter_plot: Effort vs. grade yield**")
             df_yield = df_analytics.dropna(subset=['effort'])
             df_gym_yield = df_yield[df_yield['gym_numeric'] != -1]
             df_mb_yield = df_yield[df_yield['moonboard_numeric'] != -1]
@@ -584,11 +595,11 @@ with tab_analytics:
                         marker=dict(color=theme.GRADE_COLORS["Purple"], opacity=0.7),
                     ))
                 fig_yield.update_layout(template=theme.PLOTLY_TEMPLATE, xaxis_title="Effort (1-10)", yaxis_title="Max grade (encoded)")
-                st.plotly_chart(fig_yield, use_container_width=True)
+                st.plotly_chart(fig_yield)
             else:
                 st.info("No grade data logged in this range.")
 
-        st.markdown("**🏆 Peak Performance Highlights**")
+        st.markdown("**:material/emoji_events: Peak performance highlights**")
         top_sessions = get_peak_sessions(df_analytics, n=3)
 
         if not top_sessions.empty:
@@ -601,18 +612,18 @@ with tab_analytics:
                     st.markdown(f"**{session['date'].strftime('%d/%m/%Y')}**")
                     st.caption(session['category'])
                     if session['gym_numeric'] != -1:
-                        st.write(f"🧗 Gym: {gym_rev_map.get(int(session['gym_numeric']), '-')}")
+                        st.markdown(f":material/terrain: Gym: {gym_rev_map.get(int(session['gym_numeric']), '-')}")
                     if session['moonboard_numeric'] != -1:
-                        st.write(f"🪨 Moonboard: {mb_rev_map.get(int(session['moonboard_numeric']), '-')}")
+                        st.markdown(f":material/grid_view: Moonboard: {mb_rev_map.get(int(session['moonboard_numeric']), '-')}")
                     if pd.notna(session['effort']):
-                        st.write(f"🔥 Effort: {int(session['effort'])}/10")
+                        st.markdown(f":material/local_fire_department: Effort: {int(session['effort'])}/10")
         else:
             st.info("No sessions to highlight in this range yet.")
     else:
         st.warning("Please select an end date to view analytics.")
 
 
-@st.dialog("➕ New Exercise")
+@st.dialog("New exercise", icon=":material/add:")
 def add_exercise_modal():
     new_name = st.text_input("Name")
 
@@ -638,7 +649,7 @@ def add_exercise_modal():
     new_mandatory = st.checkbox("Always include in generated plans", value=False)
     new_exclude_from_plan = st.checkbox("Exclude from generated plans", value=False)
 
-    if st.button("💾 Create Exercise", use_container_width=True):
+    if st.button("Create exercise", icon=":material/save:", type="primary", width="stretch"):
         name_clean = new_name.strip()
         existing_names_lower = df_dict['name'].dropna().str.lower().tolist() if 'name' in df_dict.columns else []
 
@@ -667,7 +678,7 @@ def add_exercise_modal():
                 st.rerun()
 
 
-@st.dialog("✏️ Edit Exercise")
+@st.dialog("Edit exercise", icon=":material/edit:")
 def edit_exercise_modal(exercise_data):
     st.write(f"**Name:** {exercise_data['name']}")
     exercise_id = int(exercise_data['id'])
@@ -707,11 +718,10 @@ def edit_exercise_modal(exercise_data):
     current_exclude_from_plan = bool(exercise_data.get('exclude_from_plan', False))
     new_exclude_from_plan = st.checkbox("Exclude from generated plans", value=current_exclude_from_plan)
 
-    st.markdown("---")
     col_save, col_del = st.columns(2)
 
     with col_save:
-        if st.button("💾 Save Changes", use_container_width=True):
+        if st.button("Save changes", icon=":material/save:", type="primary", width="stretch"):
             payload = {
                 'Type': new_type,
                 'Sets': new_sets,
@@ -732,7 +742,7 @@ def edit_exercise_modal(exercise_data):
                 st.rerun()
 
     with col_del:
-        if st.button("🗑️ Delete Exercise", use_container_width=True):
+        if st.button("Delete exercise", icon=":material/delete:", width="stretch", key="danger_delete_exercise"):
             st.session_state.confirm_delete_exercise_id = exercise_id
 
     # Two-step delete confirmation
@@ -740,7 +750,7 @@ def edit_exercise_modal(exercise_data):
         st.warning(f"Delete **{exercise_data['name']}** permanently? This also removes it from any sessions it's linked to.")
         col_yes, col_no = st.columns(2)
         with col_yes:
-            if st.button("⚠️ Yes, delete", use_container_width=True):
+            if st.button("Yes, delete", icon=":material/warning:", width="stretch", key="danger_confirm_del_exercise_yes"):
                 with st.spinner("Deleting…"):
                     success = delete_exercise(exercise_id)
                 if success:
@@ -748,15 +758,15 @@ def edit_exercise_modal(exercise_data):
                     st.session_state.pop('confirm_delete_exercise_id', None)
                     st.rerun()
         with col_no:
-            if st.button("Cancel", use_container_width=True):
+            if st.button("Cancel", icon=":material/close:", width="stretch"):
                 st.session_state.pop('confirm_delete_exercise_id', None)
                 st.rerun()
 
 
 with tab_library:
-    st.markdown("*Click any exercise below to edit or delete it.*")
+    st.caption("Click any exercise below to edit or delete it.")
 
-    if st.button("➕ Add New Exercise"):
+    if st.button("Add new exercise", icon=":material/add:", type="primary"):
         add_exercise_modal()
 
     _browse_cols = ['name', 'type', 'sets', 'reps', 'time', 'rest', 'comments']
@@ -767,7 +777,8 @@ with tab_library:
 
     modal_opened_this_run = False
 
-    phase_tabs = st.tabs(PipelineConfig.ALLOWED_PHASES)
+    _phase_icons = {'Before': 'directions_run', 'During': 'terrain', 'After': 'self_improvement'}
+    phase_tabs = st.tabs([f":material/{_phase_icons.get(p, 'fitness_center')}: {p}" for p in PipelineConfig.ALLOWED_PHASES])
     for tab, phase in zip(phase_tabs, PipelineConfig.ALLOWED_PHASES):
         with tab:
             phase_df = df_dict[df_dict['phase'] == phase].reset_index(drop=True)
@@ -777,7 +788,6 @@ with tab_library:
 
             event = st.dataframe(
                 phase_df[_browse_cols],
-                use_container_width=True,
                 hide_index=True,
                 on_select="rerun",
                 selection_mode="single-row",
@@ -795,7 +805,7 @@ with tab_library:
 
 with tab_goals:
     if active_goal is None:
-        st.markdown("*Set a grade goal and get a generated training plan to reach it.*")
+        st.caption("Set a grade goal and get a generated training plan to reach it.")
 
         target_type_label = st.radio("Grade system", ["Gym", "Moonboard"], horizontal=True)
         target_type = 'gym' if target_type_label == 'Gym' else 'moonboard'
@@ -804,7 +814,7 @@ with tab_goals:
         selected_days = st.multiselect("Training days", PlanConfig.WEEKDAY_NAMES)
         training_weekdays = {PlanConfig.WEEKDAY_NAMES.index(name) for name in selected_days}
 
-        if st.button("Preview Plan", use_container_width=True, disabled=not training_weekdays):
+        if st.button("Preview plan", icon=":material/visibility:", width="stretch", disabled=not training_weekdays):
             st.session_state.plan_preview = preview_plan(target_type, target_grade, training_weekdays, df_past, df_dict)
             st.session_state.plan_preview_params = (target_type, target_grade, training_weekdays)
         if not training_weekdays:
@@ -832,7 +842,7 @@ with tab_goals:
                     mix = ", ".join(f"{cat} {int(w * 100)}%" for cat, w in phase['weights'].items())
                     st.write(f"**{phase['name']}** (weeks {phase['start_week']}-{phase['end_week']}, {weeks}w): {mix}")
 
-                if st.button("Confirm & Generate Plan", use_container_width=True):
+                if st.button("Confirm & generate plan", icon=":material/check_circle:", type="primary", width="stretch"):
                     saved_type, saved_grade, saved_weekdays = st.session_state.plan_preview_params
                     with st.spinner("Generating your plan…"):
                         success = create_goal_and_plan(saved_type, saved_grade, saved_weekdays, df_past, df_future, df_dict)
@@ -852,24 +862,21 @@ with tab_goals:
         )
         st.markdown(f"**Goal:** {active_goal['target_grade']} ({active_goal['target_type']})")
         st.write(f"Week {current_week} of {active_goal['total_weeks']} — {current_phase} phase")
-        st.markdown(
-            theme.phase_timeline_html(active_goal['phase_breakdown'], active_goal['total_weeks'], elapsed_weeks),
-            unsafe_allow_html=True,
-        )
+        st.html(theme.phase_timeline_html(active_goal['phase_breakdown'], active_goal['total_weeks'], elapsed_weeks))
 
         col_regen, col_abandon = st.columns(2)
         with col_regen:
-            if st.button("🔄 Regenerate Plan", use_container_width=True):
+            if st.button("Regenerate plan", icon=":material/refresh:", width="stretch"):
                 st.session_state.confirm_regenerate_goal = True
         with col_abandon:
-            if st.button("✖️ Abandon Goal", use_container_width=True):
+            if st.button("Abandon goal", icon=":material/delete:", width="stretch", key="danger_abandon_goal"):
                 st.session_state.confirm_abandon_goal = True
 
         if st.session_state.get('confirm_regenerate_goal'):
             st.warning("Re-roll the remaining weeks of this plan? Future, not-yet-logged sessions from this goal will be replaced.")
             col_yes, col_no = st.columns(2)
             with col_yes:
-                if st.button("⚠️ Yes, regenerate", use_container_width=True):
+                if st.button("Yes, regenerate", icon=":material/warning:", width="stretch", key="danger_confirm_regenerate_yes"):
                     with st.spinner("Regenerating…"):
                         success = regenerate_plan(active_goal, df_past, df_future, df_dict)
                     st.session_state.pop('confirm_regenerate_goal', None)
@@ -877,7 +884,7 @@ with tab_goals:
                         fetch_data.clear()
                         st.rerun()
             with col_no:
-                if st.button("Cancel", use_container_width=True, key="cancel_regenerate_goal"):
+                if st.button("Cancel", icon=":material/close:", width="stretch", key="cancel_regenerate_goal"):
                     st.session_state.pop('confirm_regenerate_goal', None)
                     st.rerun()
 
@@ -885,7 +892,7 @@ with tab_goals:
             st.warning("Abandon this goal? Future, not-yet-logged sessions from it will be deleted. Already-logged sessions stay as real history.")
             col_yes, col_no = st.columns(2)
             with col_yes:
-                if st.button("⚠️ Yes, abandon", use_container_width=True):
+                if st.button("Yes, abandon", icon=":material/warning:", width="stretch", key="danger_confirm_abandon_yes"):
                     with st.spinner("Abandoning…"):
                         success = abandon_goal(active_goal['id'], df_future)
                     st.session_state.pop('confirm_abandon_goal', None)
@@ -894,6 +901,6 @@ with tab_goals:
                         fetch_goal.clear()
                         st.rerun()
             with col_no:
-                if st.button("Cancel", use_container_width=True, key="cancel_abandon_goal"):
+                if st.button("Cancel", icon=":material/close:", width="stretch", key="cancel_abandon_goal"):
                     st.session_state.pop('confirm_abandon_goal', None)
                     st.rerun()

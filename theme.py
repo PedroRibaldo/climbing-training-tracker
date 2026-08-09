@@ -27,6 +27,7 @@ GRADE_COLORS = {
     "Purple": "#9B5DE0",
     "Black": "#4A4540",
 }
+DANGER = GRADE_COLORS["Red"]  # semantic alias for destructive actions (delete/abandon buttons)
 
 # --- Training category colors (deliberately distinct from GRADE_COLORS) ---
 CATEGORY_COLORS = {
@@ -116,7 +117,7 @@ def phase_timeline_html(phase_breakdown: list, total_weeks: int, elapsed_weeks: 
 
 def inject_global_css() -> str:
     """Google Fonts import + base typography/spacing rules for the app.
-    Return value is meant to be passed straight to st.markdown(unsafe_allow_html=True).
+    Return value is meant to be passed straight to st.html().
     """
     return f"""
 <style>
@@ -151,6 +152,29 @@ h1, h2, h3 {{
 
 code, .stCode, .grade-chip-label {{
     font-family: {FONT_MONO} !important;
+}}
+
+/* Destructive actions - buttons keyed "danger_*" (see app.py) get a red
+   outline that fills solid on hover/press, keeping delete/abandon actions
+   visually distinct from primary and neutral actions without shouting. */
+[class*="st-key-danger_"] button {{
+    color: {DANGER} !important;
+    border-color: {DANGER} !important;
+}}
+[class*="st-key-danger_"] button:hover,
+[class*="st-key-danger_"] button:focus-visible {{
+    color: {BASALT} !important;
+    background-color: {DANGER} !important;
+    border-color: {DANGER} !important;
+}}
+
+@media (prefers-reduced-motion: no-preference) {{
+    .stButton button {{
+        transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease;
+    }}
+    .stButton button:active {{
+        transform: scale(0.97);
+    }}
 }}
 </style>
 """
