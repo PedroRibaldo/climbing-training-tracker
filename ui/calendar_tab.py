@@ -37,18 +37,11 @@ def render(df_all_calendar, df_past, df_dict, exercises_before, exercises_during
             "center": "title",
             "right": "dayGridMonth,dayGridWeek"
         },
-        "initialView": "dayGridMonth",
+        "initialView": st.session_state.get("calendar_initial_view", "dayGridMonth"),
     }
     if st.session_state.get("calendar_initial_date"):
         calendar_options["initialDate"] = st.session_state.calendar_initial_date
 
-    # Keyed by a nonce that only advances when a click is handled (below), not
-    # on every rerun - the calendar component's dateClick payload has no
-    # per-click identifier (same date -> byte-identical value), so a second
-    # click on the same date is otherwise indistinguishable from Streamlit
-    # re-delivering the previous click's value on an unrelated rerun.
-    # Remounting with a new key resets its value to {} first, guaranteeing
-    # the next real click is always seen as new, same date or not.
     cal = calendar(
         events=calendar_events, options=calendar_options, callbacks=['dateClick'],
         key=f"calendar_{st.session_state.get('calendar_nonce', 0)}",
@@ -62,6 +55,7 @@ def render(df_all_calendar, df_past, df_dict, exercises_before, exercises_during
 
         st.session_state.calendar_nonce = st.session_state.get("calendar_nonce", 0) + 1
         st.session_state.calendar_initial_date = clean_clicked_date
+        st.session_state.calendar_initial_view = cal["dateClick"]["view"]["type"]
 
         if not existing_session.empty:
             session_modal.edit_session_modal(
