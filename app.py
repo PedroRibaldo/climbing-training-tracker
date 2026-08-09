@@ -149,8 +149,9 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
             cat_opts = PipelineConfig.ALLOWED_CATEGORIES
             new_cat = st.selectbox("Category", cat_opts)
         else:
-            st.write(f"**Category:** {session_data['category']}")
-            new_cat = session_data['category']
+            cat_opts = PipelineConfig.ALLOWED_CATEGORIES
+            current_cat = session_data['category'] if session_data['category'] in cat_opts else cat_opts[0]
+            new_cat = st.selectbox("Category", cat_opts, index=cat_opts.index(current_cat))
 
         current_effort = None if pd.isna(session_data['effort']) else int(session_data['effort'])
         new_effort = st.number_input("Effort Scale (1-10)", min_value=1, max_value=10, value=current_effort, step=1)
@@ -244,6 +245,7 @@ def _render_session_edit_form(session_data, is_new=False, on_saved=None):
         with col_save:
             if st.button("💾 Save Changes", use_container_width=True):
                 updated_data = {
+                    'Category': new_cat,
                     'Effort Scale': new_effort,
                     'Max Gym Grade Color': new_gym,
                     'Max Moonboard Grade': new_mb,
