@@ -56,18 +56,33 @@ Every row fetched from Supabase is validated with Pydantic before it reaches the
 
 ```
 .
-├── app.py                     # Streamlit dashboard: calendar, analytics, exercise library, goals
-├── data_pipeline.py           # Supabase I/O, Pydantic validation, data cleaning, analytics
-├── training_plan.py           # Deterministic training-plan generation engine
-├── theme.py                   # Design tokens, dark theme, shared Plotly template
-├── Script.gs                  # Apps Script bridge: mobile widgets → Supabase REST API
-├── .streamlit/config.toml     # Streamlit theme configuration
+├── app.py                       # Page setup, caching, tab dispatch
+├── theme.py
+├── data_pipeline/               # Supabase I/O, Pydantic validation, data cleaning, analytics
+│   ├── models.py
+│   ├── client.py
+│   ├── cleaning.py
+│   ├── sessions.py
+│   ├── exercises.py
+│   └── analytics.py
+├── training_plan/               # Training-plan generation engine
+│   ├── algorithm.py
+│   └── store.py
+├── ui/                          # Tab and modal rendering, one module per screen
+│   ├── session_modal.py
+│   ├── exercise_modals.py
+│   ├── calendar_tab.py
+│   ├── analytics_tab.py
+│   ├── library_tab.py
+│   └── goals_tab.py
+├── Script.gs                    # Apps Script bridge: mobile widgets → Supabase REST API
+├── .streamlit/config.toml       # Streamlit theme configuration
 ├── tests/
-│   ├── test_data_pipeline.py  # Validation, cleaning, and analytics tests
-│   └── test_training_plan.py  # Training-plan generation engine tests
-├── requirements.txt           # Python dependencies
-├── requirements-dev.txt       # Adds pytest, for running the test suite
-└── .env                       # Local Supabase credentials
+│   ├── test_data_pipeline.py    # Validation, cleaning, and analytics tests
+│   └── test_training_plan.py    # Training-plan generation engine tests
+├── requirements.txt
+├── requirements-dev.txt
+└── .env                         # Local Supabase credentials
 ```
 
 ---
