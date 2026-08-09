@@ -29,8 +29,8 @@ def render(client, df_all_calendar, df_past, df_dict, exercises_before, exercise
     ]
 
     calendar_options = {
-        "editable": "false",
-        "selectable": "true",
+        "editable": False,
+        "selectable": True,
         "height": "auto",
         "headerToolbar": {
             "left": "prev,next today",
