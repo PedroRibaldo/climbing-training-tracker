@@ -15,7 +15,7 @@ from data_pipeline import load_clean_data, compute_kpis
 from training_plan import get_active_goal, check_and_update_goal_completion
 import theme
 
-from ui import session_modal, calendar_tab, analytics_tab, library_tab, goals_tab
+from ui import auth_gate, session_modal, calendar_tab, analytics_tab, library_tab, goals_tab
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Climbing Training Tracker", page_icon=":material/terrain:", layout="wide")
@@ -78,21 +78,28 @@ iframe[data-testid="stCustomComponentV1"] {{
 </style>
 """)
 
+# --- AUTH GATE ---
+if not auth_gate.require_login():
+    st.stop()
+
+client = st.session_state.supabase_client
+auth_gate.render_logout_control()
+
 # --- DATA LOADING ---
 @st.cache_data
-def fetch_data():
+def fetch_data(_client):
     """Cached wrapper around load_clean_data() so every rerun doesn't hit
     Supabase. Cleared explicitly after any write (see the
     modal's save/delete/add actions below)."""
-    return load_clean_data()
+    return load_clean_data(_client)
 
 with st.spinner("Loading your training data…"):
-    df_past, df_future, df_dict = fetch_data()
+    df_past, df_future, df_dict = fetch_data(client)
 
 @st.cache_data
-def fetch_goal():
+def fetch_goal(_client):
     """Cached wrapper around get_active_goal(), mirroring fetch_data()."""
-    return get_active_goal()
+    return get_active_goal(_client)
 
 def refresh_data():
     """Clear the cached session/exercise data. Callers decide when to
@@ -105,9 +112,9 @@ def refresh_all():
     fetch_data.clear()
     fetch_goal.clear()
 
-active_goal = fetch_goal()
+active_goal = fetch_goal(client)
 if active_goal is not None:
-    if check_and_update_goal_completion(active_goal, df_past, df_future):
+    if check_and_update_goal_completion(client, active_goal, df_past, df_future):
         refresh_all()
         st.rerun()
 
@@ -148,7 +155,7 @@ if "due_sessions_checked" not in st.session_state:
 
 if st.session_state.due_carousel_index < len(st.session_state.get("due_sessions_queue", [])):
     session_modal.due_sessions_carousel(
-        df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data,
+        client, df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data,
     )
 
 
@@ -160,14 +167,14 @@ tab_calendar, tab_analytics, tab_library, tab_goals = st.tabs([
 
 with tab_calendar:
     calendar_tab.render(
-        df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data,
+        client, df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data,
     )
 
 with tab_analytics:
     analytics_tab.render(df_past)
 
 with tab_library:
-    library_tab.render(df_dict, refresh_data)
+    library_tab.render(client, df_dict, refresh_data)
 
 with tab_goals:
-    goals_tab.render(active_goal, df_past, df_future, df_dict, refresh_data, refresh_all)
+    goals_tab.render(client, active_goal, df_past, df_future, df_dict, refresh_data, refresh_all)

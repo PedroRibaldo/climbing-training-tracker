@@ -11,7 +11,7 @@ from training_plan import PlanConfig, preview_plan, create_goal_and_plan, regene
 import theme
 
 
-def render(active_goal, df_past, df_future, df_dict, refresh_data, refresh_all):
+def render(client, active_goal, df_past, df_future, df_dict, refresh_data, refresh_all):
     if active_goal is None:
         st.caption("Set a grade goal and get a generated training plan to reach it.")
 
@@ -53,7 +53,7 @@ def render(active_goal, df_past, df_future, df_dict, refresh_data, refresh_all):
                 if st.button("Confirm & generate plan", icon=":material/check_circle:", type="primary", width="stretch"):
                     saved_type, saved_grade, saved_weekdays = st.session_state.plan_preview_params
                     with st.spinner("Generating your plan…"):
-                        success = create_goal_and_plan(saved_type, saved_grade, saved_weekdays, df_past, df_future, df_dict)
+                        success = create_goal_and_plan(client, saved_type, saved_grade, saved_weekdays, df_past, df_future, df_dict)
                     if success:
                         refresh_all()
                         st.session_state.pop('plan_preview', None)
@@ -85,7 +85,7 @@ def render(active_goal, df_past, df_future, df_dict, refresh_data, refresh_all):
             with col_yes:
                 if st.button("Yes, regenerate", icon=":material/warning:", width="stretch", key="danger_confirm_regenerate_yes"):
                     with st.spinner("Regenerating…"):
-                        success = regenerate_plan(active_goal, df_past, df_future, df_dict)
+                        success = regenerate_plan(client, active_goal, df_past, df_future, df_dict)
                     st.session_state.pop('confirm_regenerate_goal', None)
                     if success:
                         refresh_data()
@@ -101,7 +101,7 @@ def render(active_goal, df_past, df_future, df_dict, refresh_data, refresh_all):
             with col_yes:
                 if st.button("Yes, abandon", icon=":material/warning:", width="stretch", key="danger_confirm_abandon_yes"):
                     with st.spinner("Abandoning…"):
-                        success = abandon_goal(active_goal['id'], df_future)
+                        success = abandon_goal(client, active_goal['id'], df_future)
                     st.session_state.pop('confirm_abandon_goal', None)
                     if success:
                         refresh_all()

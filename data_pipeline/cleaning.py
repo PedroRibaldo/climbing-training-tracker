@@ -7,7 +7,6 @@ from typing import Any, Optional
 import pandas as pd
 import streamlit as st
 
-from .client import _get_supabase_client
 from .models import PipelineConfig, SessionRecord, ExerciseRecord, _validate_records
 
 
@@ -59,7 +58,7 @@ def _flatten_exercise_row(row: dict) -> dict:
     return flat
 
 
-def load_clean_data(config: Optional[PipelineConfig] = None):
+def load_clean_data(client, config: Optional[PipelineConfig] = None):
     """Fetch sessions + exercises from Supabase and return them validated,
     cleaned, and split by date.
 
@@ -69,8 +68,6 @@ def load_clean_data(config: Optional[PipelineConfig] = None):
     """
     if config is None:
         config = PipelineConfig()
-
-    client = _get_supabase_client(config)
 
     session_response = client.table(config.SESSIONS_TABLE).select(
         '*, training_exercises(exercise(name))'

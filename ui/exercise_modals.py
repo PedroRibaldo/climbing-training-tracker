@@ -9,7 +9,7 @@ from data_pipeline import PipelineConfig, add_exercise, update_exercise, delete_
 
 
 @st.dialog("New exercise", icon=":material/add:")
-def add_exercise_modal(df_dict, refresh_data):
+def add_exercise_modal(client, df_dict, refresh_data):
     new_name = st.text_input("Name")
 
     type_opts = PipelineConfig.ALLOWED_EXERCISE_TYPES
@@ -57,14 +57,14 @@ def add_exercise_modal(df_dict, refresh_data):
                 'ExcludeFromPlan': new_exclude_from_plan,
             }
             with st.spinner("Saving…"):
-                success = add_exercise(payload)
+                success = add_exercise(client, payload)
             if success:
                 refresh_data()
                 st.rerun()
 
 
 @st.dialog("Edit exercise", icon=":material/edit:")
-def edit_exercise_modal(exercise_data, refresh_data):
+def edit_exercise_modal(client, exercise_data, refresh_data):
     st.write(f"**Name:** {exercise_data['name']}")
     exercise_id = int(exercise_data['id'])
 
@@ -120,7 +120,7 @@ def edit_exercise_modal(exercise_data, refresh_data):
                 'ExcludeFromPlan': new_exclude_from_plan,
             }
             with st.spinner("Saving…"):
-                success = update_exercise(exercise_id, payload)
+                success = update_exercise(client, exercise_id, payload)
             if success:
                 refresh_data()
                 st.session_state.pop('confirm_delete_exercise_id', None)
@@ -137,7 +137,7 @@ def edit_exercise_modal(exercise_data, refresh_data):
         with col_yes:
             if st.button("Yes, delete", icon=":material/warning:", width="stretch", key="danger_confirm_del_exercise_yes"):
                 with st.spinner("Deleting…"):
-                    success = delete_exercise(exercise_id)
+                    success = delete_exercise(client, exercise_id)
                 if success:
                     refresh_data()
                     st.session_state.pop('confirm_delete_exercise_id', None)
