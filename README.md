@@ -1,6 +1,6 @@
 # 🧗 Climbing Training Tracker
 
-A full-stack personal training platform for climbers: fast mobile logging, sports-science analytics, and an ACWR-guarded engine that generates and adapts multi-week training plans from your own training history.
+A full-stack personal training platform for climbers: fast session logging, sports-science analytics, and an ACWR-guarded engine that generates and adapts multi-week training plans from your own training history.
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue
 )
@@ -13,7 +13,6 @@ A full-stack personal training platform for climbers: fast mobile logging, sport
 ## Features
 
 **Logging**
-- One-tap mobile logging via two Android home screen widgets (log a session, register an exercise).
 - Click-to-edit calendar - click any day to log or amend a session.
 - Before / During / After exercise phasing, pulled from an Exercise Library.
 - Smart defaults pre-fill warm-up/cool-down from your last session; a catch-up carousel surfaces anything left unlogged.
@@ -40,13 +39,12 @@ A full-stack personal training platform for climbers: fast mobile logging, sport
 | Data validation   | [Pydantic](https://docs.pydantic.dev)                                                                       |
 | Data processing   | pandas, numpy                                                                                                |
 | Database          | [Supabase](https://supabase.com) (Postgres) via [supabase-py](https://github.com/supabase/supabase-py)      |
-| Mobile data entry | [HTTP Request Shortcuts](https://http-shortcuts.rmy.ch) (Android) → Google Apps Script → Supabase REST API  |
 
 ---
 
 ## Data Architecture
 
-📱 **Android widgets** (HTTP Request Shortcuts) ➔ ⚙️ **Google Apps Script** (bridge) ➔ 🗄️ **Supabase** (Postgres) ➔ 🐍 **Pandas + Pydantic** (validation & cleaning) ➔ 📊 **Streamlit** (dashboard)
+🗄️ **Supabase** (Postgres) ➔ 🐍 **Pandas + Pydantic** (validation & cleaning) ➔ 📊 **Streamlit** (dashboard)
 
 Every row fetched from Supabase is validated with Pydantic before it reaches the dashboard - validation is enforced at the application layer.
 
@@ -75,7 +73,6 @@ Every row fetched from Supabase is validated with Pydantic before it reaches the
 │   ├── analytics_tab.py
 │   ├── library_tab.py
 │   └── goals_tab.py
-├── Script.gs                    # Apps Script bridge: mobile widgets → Supabase REST API
 ├── .streamlit/config.toml       # Streamlit theme configuration
 ├── tests/
 │   ├── test_data_pipeline.py    # Validation, cleaning, and analytics tests
@@ -91,7 +88,6 @@ Every row fetched from Supabase is validated with Pydantic before it reaches the
 
 - Python 3.10+
 - A free [Supabase](https://supabase.com) account
-- An Android phone with [HTTP Request Shortcuts](https://http-shortcuts.rmy.ch) installed (optional)
 
 ---
 
@@ -141,26 +137,6 @@ streamlit run app.py
 ```
 
 The dashboard opens automatically at `http://localhost:8501`.
-
-### 5. Set up mobile logging (optional)
-
-Sessions and new exercises can be logged from an Android home screen instead of through the dashboard, using `Script.gs` as a small bridge between the widgets and Supabase's REST API.
-
-1. In Supabase, go to **Connect** and copy your Project URL and key (same ones from step 2).
-2. Create a new Google Sheet (used only to host the Apps Script), go to **Extensions → Apps Script**, and paste in the contents of `Script.gs`.
-3. Under **Project Settings → Script Properties**, add three properties:
-   - `API_TOKEN` - a long random string you generate once; the shared secret the widgets send to authenticate.
-   - `SUPABASE_URL` - your Supabase Project URL.
-   - `SUPABASE_KEY` - your Supabase key.
-4. Deploy via **Deploy → New deployment → Web app**, with **Execute as: Me** and **Who has access: Anyone**, then copy the deployment URL.
-5. In [HTTP Request Shortcuts](https://http-shortcuts.rmy.ch), create two shortcuts pointed at that URL:
-   - **Log Session** → POST to `<deployment-url>?action=log_session`
-   - **Add Exercise** → POST to `<deployment-url>?action=add_exercise`
-
-   Each shortcut sends a JSON body with the relevant fields (see the docstrings in `Script.gs`) plus the `token` value from step 3.
-6. Add both shortcuts to your home screen as widgets.
-
-> ⚠️ Apps Script web apps can't read custom request headers, so access control relies entirely on the `API_TOKEN` value inside the JSON body - keep it private, and treat the deployment URL as a secret.
 
 ---
 
