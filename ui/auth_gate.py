@@ -35,38 +35,58 @@ def require_login() -> bool:
     if is_logged_in():
         return True
 
-    st.title(":material/terrain: Climbing training")
-    tab_login, tab_signup = st.tabs([":material/login: Log in", ":material/person_add: Sign up"])
+    # A fixed-width card centered on the page - full-width tabs/forms on
+    # st.set_page_config(layout="wide") would otherwise stretch edge to
+    # edge, which reads as unstyled for a first-impression login screen.
+    with st.container(horizontal_alignment="center"):
+        with st.container(width=420, border=True):
+            st.title(":material/terrain: Climbing training", text_alignment="center")
+            st.caption("Log in to track your sessions and training plans.", text_alignment="center")
 
-    with tab_login:
-        with st.form("login_form"):
-            email = st.text_input("Email")
-            password = st.text_input("Password", type="password")
-            if st.form_submit_button("Log in", type="primary", width="stretch"):
-                error, refresh_token = log_in(email, password)
-                if error:
-                    st.error(error)
-                else:
-                    cookies.set(REFRESH_TOKEN_COOKIE, refresh_token, max_age=COOKIE_MAX_AGE_SECONDS)
-                    st.rerun()
+            tab_login, tab_signup = st.tabs([":material/login: Log in", ":material/person_add: Sign up"])
 
-    with tab_signup:
-        with st.form("signup_form"):
-            new_email = st.text_input("Email", key="signup_email")
-            new_password = st.text_input("Password", type="password", key="signup_password")
-            confirm_password = st.text_input("Confirm password", type="password", key="signup_confirm_password")
-            if st.form_submit_button("Sign up", type="primary", width="stretch"):
-                if new_password != confirm_password:
-                    st.error("Passwords don't match.")
-                else:
-                    needs_confirmation, message, refresh_token = sign_up(new_email, new_password)
-                    if needs_confirmation:
-                        st.success(message)
-                    elif refresh_token:
-                        cookies.set(REFRESH_TOKEN_COOKIE, refresh_token, max_age=COOKIE_MAX_AGE_SECONDS)
-                        st.rerun()
-                    else:
-                        st.error(message)
+            with tab_login:
+                with st.form("login_form", border=False):
+                    email = st.text_input("Email", icon=":material/mail:", autocomplete="email")
+                    password = st.text_input(
+                        "Password", type="password", icon=":material/lock:", autocomplete="current-password",
+                    )
+                    if st.form_submit_button("Log in", type="primary", width="stretch"):
+                        with st.spinner("Logging in…"):
+                            error, refresh_token = log_in(email, password)
+                        if error:
+                            st.error(error)
+                        else:
+                            cookies.set(REFRESH_TOKEN_COOKIE, refresh_token, max_age=COOKIE_MAX_AGE_SECONDS)
+                            st.rerun()
+
+            with tab_signup:
+                with st.form("signup_form", border=False):
+                    new_email = st.text_input(
+                        "Email", icon=":material/mail:", autocomplete="email", key="signup_email",
+                    )
+                    new_password = st.text_input(
+                        "Password", type="password", icon=":material/lock:", autocomplete="new-password",
+                        key="signup_password",
+                    )
+                    st.caption("At least 6 characters.")
+                    confirm_password = st.text_input(
+                        "Confirm password", type="password", icon=":material/lock_reset:", autocomplete="new-password",
+                        key="signup_confirm_password",
+                    )
+                    if st.form_submit_button("Sign up", type="primary", width="stretch"):
+                        if new_password != confirm_password:
+                            st.error("Passwords don't match.")
+                        else:
+                            with st.spinner("Creating your account…"):
+                                needs_confirmation, message, refresh_token = sign_up(new_email, new_password)
+                            if needs_confirmation:
+                                st.success(message)
+                            elif refresh_token:
+                                cookies.set(REFRESH_TOKEN_COOKIE, refresh_token, max_age=COOKIE_MAX_AGE_SECONDS)
+                                st.rerun()
+                            else:
+                                st.error(message)
 
     st.stop()
     return False
@@ -75,7 +95,7 @@ def require_login() -> bool:
 def render_logout_control() -> None:
     """Sidebar element showing the logged-in email and a logout button."""
     with st.sidebar:
-        st.caption(f"Logged in as {st.session_state.auth_user_email}")
+        st.caption(f":material/account_circle: Logged in as {st.session_state.auth_user_email}")
         if st.button("Log out", icon=":material/logout:", width="stretch"):
             _cookies().remove(REFRESH_TOKEN_COOKIE)
             log_out()
