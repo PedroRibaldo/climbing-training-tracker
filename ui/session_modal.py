@@ -177,7 +177,7 @@ def _render_session_edit_form(
                     st.rerun()
 
 
-@st.dialog("Session details", icon=":material/edit:")
+@st.dialog("Session details", icon=":material/edit:", on_dismiss="rerun")
 def edit_session_modal(
     session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
     refresh_data, is_new=False,
