@@ -105,6 +105,15 @@ class TestSessionValidation:
         past, _, _ = clean_data(rows, [], config)
         assert pd.isna(past.iloc[0]['exercises'])
 
+    def test_goal_id_passes_through(self, config):
+        rows = [make_session_row(goal_id=7)]
+        past, future, _ = clean_data(rows, [], config)
+        assert past.iloc[0]['goal_id'] == 7
+
+    def test_missing_goal_id_becomes_none(self, config):
+        past, future, _ = clean_data([make_session_row()], [], config)
+        assert pd.isna(past.iloc[0]['goal_id'])
+
     def test_past_future_split(self, config):
         rows = [
             make_session_row(id=1, date='2020-01-01'),
@@ -167,6 +176,51 @@ class TestExerciseValidation:
         _, _, df_dict = clean_data([], rows, config)
         assert len(df_dict) == 1
         assert df_dict.iloc[0]['phase'] is None
+
+    def test_categories_parse_correctly(self, config):
+        rows = [make_exercise_row(categories=['Strength', 'Technique'])]
+        _, _, df_dict = clean_data([], rows, config)
+        assert df_dict.iloc[0]['categories'] == ['Strength', 'Technique']
+
+    def test_missing_categories_becomes_empty_list(self, config):
+        rows = [make_exercise_row()]
+        _, _, df_dict = clean_data([], rows, config)
+        assert df_dict.iloc[0]['categories'] == []
+
+    def test_invalid_category_is_skipped(self, config):
+        rows = [make_exercise_row(categories=['NotACategory'])]
+        _, _, df_dict = clean_data([], rows, config)
+        assert len(df_dict) == 0
+
+    def test_mandatory_defaults_to_false(self, config):
+        rows = [make_exercise_row()]
+        _, _, df_dict = clean_data([], rows, config)
+        assert df_dict.iloc[0]['mandatory'] == False
+
+    def test_mandatory_true_parses_correctly(self, config):
+        rows = [make_exercise_row(mandatory=True)]
+        _, _, df_dict = clean_data([], rows, config)
+        assert df_dict.iloc[0]['mandatory'] == True
+
+    def test_mandatory_null_becomes_false(self, config):
+        rows = [make_exercise_row(mandatory=None)]
+        _, _, df_dict = clean_data([], rows, config)
+        assert df_dict.iloc[0]['mandatory'] == False
+
+    def test_exclude_from_plan_defaults_to_false(self, config):
+        rows = [make_exercise_row()]
+        _, _, df_dict = clean_data([], rows, config)
+        assert df_dict.iloc[0]['exclude_from_plan'] == False
+
+    def test_exclude_from_plan_true_parses_correctly(self, config):
+        rows = [make_exercise_row(exclude_from_plan=True)]
+        _, _, df_dict = clean_data([], rows, config)
+        assert df_dict.iloc[0]['exclude_from_plan'] == True
+
+    def test_exclude_from_plan_null_becomes_false(self, config):
+        rows = [make_exercise_row(exclude_from_plan=None)]
+        _, _, df_dict = clean_data([], rows, config)
+        assert df_dict.iloc[0]['exclude_from_plan'] == False
 
 
 class TestComputeACWR:

@@ -24,8 +24,10 @@ class PipelineConfig:
     SESSIONS_TABLE = 'climbing_training'
     EXERCISES_TABLE = 'exercise'
     JUNCTION_TABLE = 'training_exercises'
+    EXERCISE_CATEGORIES_TABLE = 'exercise_categories'
 
     ALLOWED_CATEGORIES = ['Strength', 'Stamina', 'Technique', 'Free', 'Rest']
+    ALLOWED_EXERCISE_CATEGORIES = ['Strength', 'Stamina', 'Technique', 'Free']
     ALLOWED_EXERCISE_TYPES = ['Reps', 'Time']
     ALLOWED_PHASES = ['Before', 'During', 'After']
 
@@ -65,6 +67,7 @@ class SessionRecord(BaseModel):
     moonboard_grade: Optional[str] = None
     injured: bool = False
     exercises: Optional[str] = None
+    goal_id: Optional[int] = None
 
     @field_validator('date_entry', mode='before')
     @classmethod
@@ -134,6 +137,30 @@ class ExerciseRecord(BaseModel):
     rest: Optional[int] = None
     comments: Optional[str] = None
     phase: Optional[str] = None
+    categories: list[str] = []
+    mandatory: bool = False
+    exclude_from_plan: bool = False
+
+    @field_validator('mandatory', mode='before')
+    @classmethod
+    def validate_mandatory(cls, v):
+        return bool(v)
+
+    @field_validator('exclude_from_plan', mode='before')
+    @classmethod
+    def validate_exclude_from_plan(cls, v):
+        return bool(v)
+
+    @field_validator('categories', mode='before')
+    @classmethod
+    def validate_categories(cls, v):
+        if not v:
+            return []
+        cleaned = [str(c).strip() for c in v if str(c).strip()]
+        invalid = [c for c in cleaned if c not in PipelineConfig.ALLOWED_EXERCISE_CATEGORIES]
+        if invalid:
+            raise ValueError(f'Unknown exercise categor{"y" if len(invalid) == 1 else "ies"}: {invalid!r}')
+        return cleaned
 
     @field_validator('name', mode='before')
     @classmethod
@@ -251,6 +278,20 @@ def _flatten_session_row(row: dict) -> dict:
     return flat
 
 
+def _flatten_exercise_row(row: dict) -> dict:
+    """Supabase returns each exercise with a nested exercise_categories list
+    (via the embedded join). Flatten that into a plain 'categories' list of
+    strings, matching the shape ExerciseRecord expects."""
+    categories = [
+        ec['category']
+        for ec in (row.get('exercise_categories') or [])
+        if ec.get('category')
+    ]
+    flat = {k: v for k, v in row.items() if k != 'exercise_categories'}
+    flat['categories'] = categories
+    return flat
+
+
 def load_clean_data(config: Optional[PipelineConfig] = None):
     """Fetch sessions + exercises from Supabase and return them validated,
     cleaned, and split by date.
@@ -267,10 +308,12 @@ def load_clean_data(config: Optional[PipelineConfig] = None):
     session_response = client.table(config.SESSIONS_TABLE).select(
         '*, training_exercises(exercise(name))'
     ).execute()
-    exercise_response = client.table(config.EXERCISES_TABLE).select('*').execute()
+    exercise_response = client.table(config.EXERCISES_TABLE).select(
+        '*, exercise_categories(category)'
+    ).execute()
 
     main_records = [_flatten_session_row(row) for row in session_response.data]
-    dict_records = exercise_response.data
+    dict_records = [_flatten_exercise_row(row) for row in exercise_response.data]
 
     return clean_data(main_records, dict_records, config)
 
@@ -339,6 +382,14 @@ def _sync_session_exercises(session_id: int, exercises_str: Optional[str], confi
     junction_rows = [{'training_id': session_id, 'exercise_id': name_to_id[n]} for n in names if n in name_to_id]
     if junction_rows:
         client.table(config.JUNCTION_TABLE).insert(junction_rows).execute()
+
+
+def _sync_exercise_categories(exercise_id: int, categories: list[str], config: PipelineConfig, client: Client) -> None:
+    """Replace an exercise's category tags with the given list."""
+    client.table(config.EXERCISE_CATEGORIES_TABLE).delete().eq('exercise_id', exercise_id).execute()
+    rows = [{'exercise_id': exercise_id, 'category': c} for c in categories]
+    if rows:
+        client.table(config.EXERCISE_CATEGORIES_TABLE).insert(rows).execute()
 
 
 def update_session(session_id: int, updated_data: dict, config: Optional[PipelineConfig] = None) -> bool:
@@ -435,12 +486,20 @@ def add_exercise(new_data: dict, config: Optional[PipelineConfig] = None) -> boo
         'rest': _clean_write_value(new_data.get('Rest')),
         'comments': _clean_write_value(new_data.get('Comments')),
         'phase': _clean_write_value(new_data.get('Phase')),
+        'mandatory': bool(new_data.get('Mandatory', False)),
+        'exclude_from_plan': bool(new_data.get('ExcludeFromPlan', False)),
     }
     try:
-        client.table(config.EXERCISES_TABLE).insert(payload).execute()
+        response = client.table(config.EXERCISES_TABLE).insert(payload).execute()
     except Exception as exc:
         st.error(f"Couldn't create exercise: {exc}")
         return False
+
+    if response.data:
+        try:
+            _sync_exercise_categories(response.data[0]['id'], new_data.get('Categories') or [], config, client)
+        except Exception as exc:
+            st.warning(f"Exercise created, but its categories couldn't be saved: {exc}")
     return True
 
 
@@ -453,6 +512,7 @@ def update_exercise(exercise_id: int, updated_data: dict, config: Optional[Pipel
     field_map = {
         'Name': 'name', 'Type': 'type', 'Sets': 'sets', 'Reps': 'reps',
         'Time': 'time', 'Rest': 'rest', 'Comments': 'comments', 'Phase': 'phase',
+        'Mandatory': 'mandatory', 'ExcludeFromPlan': 'exclude_from_plan',
     }
     payload = {
         field_map[k]: _clean_write_value(v)
@@ -465,6 +525,12 @@ def update_exercise(exercise_id: int, updated_data: dict, config: Optional[Pipel
     except Exception as exc:
         st.error(f"Couldn't save exercise: {exc}")
         return False
+
+    if 'Categories' in updated_data:
+        try:
+            _sync_exercise_categories(exercise_id, updated_data.get('Categories') or [], config, client)
+        except Exception as exc:
+            st.warning(f"Exercise saved, but its categories couldn't be updated: {exc}")
     return True
 
 

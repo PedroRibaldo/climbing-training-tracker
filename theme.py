@@ -96,6 +96,24 @@ def color_key_html(colors: dict, title: str = "Color Key") -> str:
 """
 
 
+def phase_timeline_html(phase_breakdown: list, total_weeks: int, elapsed_weeks: float) -> str:
+    """A horizontal bar showing each plan phase as a proportional colored
+    segment, with a vertical marker at the current position."""
+    phase_colors = {'Base': STONE, 'Build': ACCENT, 'Peak': GRADE_COLORS['Red']}
+    segments = "".join(
+        f'<div style="flex:{p["end_week"] - p["start_week"] + 1}; background:{phase_colors.get(p["name"], STONE)}; '
+        f'padding:0.35rem 0; text-align:center; font-family:{FONT_MONO}; font-size:0.7rem; color:{BASALT};">{p["name"]}</div>'
+        for p in phase_breakdown
+    )
+    marker_pct = max(0.0, min(1.0, elapsed_weeks / total_weeks)) * 100
+    return f"""
+<div style="position:relative; margin:0.6rem 0 1rem 0;">
+  <div style="display:flex; border-radius:6px; overflow:hidden; border:1px solid {ROPE};">{segments}</div>
+  <div style="position:absolute; top:-4px; left:{marker_pct:.1f}%; width:2px; height:calc(100% + 8px); background:{CHALK};"></div>
+</div>
+"""
+
+
 def inject_global_css() -> str:
     """Google Fonts import + base typography/spacing rules for the app.
     Return value is meant to be passed straight to st.markdown(unsafe_allow_html=True).

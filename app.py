@@ -17,6 +17,10 @@ from plotly.subplots import make_subplots
 from streamlit_calendar import calendar
 
 from data_pipeline import load_clean_data, update_session, add_session, delete_session, add_exercise, update_exercise, delete_exercise, compute_acwr, compute_kpis, get_peak_sessions, PipelineConfig
+from training_plan import (
+    PlanConfig, preview_plan, create_goal_and_plan, get_active_goal, regenerate_plan, abandon_goal,
+    check_and_update_goal_completion,
+)
 import theme
 
 # --- PAGE CONFIGURATION ---
@@ -58,6 +62,16 @@ st.markdown(f"""
 .fc-bg-event {{
     opacity: 0.85 !important;
 }}
+/* The calendar is a custom JS component that measures its own height and
+   reports it back to Streamlit. Streamlit's tabs are purely client-side
+   (switching tabs never reruns the Python script), so if a script rerun
+   happens while this tab is hidden (e.g. triggered from the Goals tab),
+   the component measures a hidden (0-height) element and gets stuck
+   reporting 0 until a full page reload. Forcing a minimum height here
+   keeps the calendar visible regardless of what the component reports. */
+iframe[data-testid="stCustomComponentV1"] {{
+    min-height: 650px !important;
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -71,6 +85,18 @@ def fetch_data():
 
 with st.spinner("Loading your training data…"):
     df_past, df_future, df_dict = fetch_data()
+
+@st.cache_data
+def fetch_goal():
+    """Cached wrapper around get_active_goal(), mirroring fetch_data()."""
+    return get_active_goal()
+
+active_goal = fetch_goal()
+if active_goal is not None:
+    if check_and_update_goal_completion(active_goal, df_past, df_future):
+        fetch_data.clear()
+        fetch_goal.clear()
+        st.rerun()
 
 # Single combined view of every dated session, used to drive the calendar
 df_all_calendar = pd.concat([df_past, df_future]).dropna(subset=['date']).copy()
@@ -338,7 +364,7 @@ if st.session_state.due_carousel_index < len(st.session_state.get("due_sessions_
 
 
 # --- TOP-LEVEL NAVIGATION ---
-tab_calendar, tab_analytics, tab_library = st.tabs(["📅 Calendar", "📊 Analytics", "🏋️ Exercise Library"])
+tab_calendar, tab_analytics, tab_library, tab_goals = st.tabs(["📅 Calendar", "📊 Analytics", "🏋️ Exercise Library", "🎯 Goals"])
 
 with tab_calendar:
     st.markdown("*Click any colored session to edit it, or click a blank day to log a missed session.*")
@@ -588,6 +614,12 @@ def add_exercise_modal():
     phase_opts = PipelineConfig.ALLOWED_PHASES
     new_phase = st.selectbox("Phase", phase_opts)
 
+    category_opts = PipelineConfig.ALLOWED_EXERCISE_CATEGORIES
+    new_categories = st.multiselect("Categories", category_opts)
+
+    new_mandatory = st.checkbox("Always include in generated plans", value=False)
+    new_exclude_from_plan = st.checkbox("Exclude from generated plans", value=False)
+
     if st.button("💾 Create Exercise", use_container_width=True):
         name_clean = new_name.strip()
         existing_names_lower = df_dict['name'].dropna().str.lower().tolist() if 'name' in df_dict.columns else []
@@ -606,6 +638,9 @@ def add_exercise_modal():
                 'Rest': new_rest,
                 'Comments': new_comments,
                 'Phase': new_phase,
+                'Categories': new_categories,
+                'Mandatory': new_mandatory,
+                'ExcludeFromPlan': new_exclude_from_plan,
             }
             with st.spinner("Saving…"):
                 success = add_exercise(payload)
@@ -645,6 +680,15 @@ def edit_exercise_modal(exercise_data):
     current_phase = exercise_data['phase'] if pd.notna(exercise_data['phase']) and exercise_data['phase'] in phase_opts else phase_opts[0]
     new_phase = st.selectbox("Phase", phase_opts, index=phase_opts.index(current_phase))
 
+    category_opts = PipelineConfig.ALLOWED_EXERCISE_CATEGORIES
+    current_categories = [c for c in (exercise_data.get('categories') or []) if c in category_opts]
+    new_categories = st.multiselect("Categories", category_opts, default=current_categories)
+
+    current_mandatory = bool(exercise_data.get('mandatory', False))
+    new_mandatory = st.checkbox("Always include in generated plans", value=current_mandatory)
+    current_exclude_from_plan = bool(exercise_data.get('exclude_from_plan', False))
+    new_exclude_from_plan = st.checkbox("Exclude from generated plans", value=current_exclude_from_plan)
+
     st.markdown("---")
     col_save, col_del = st.columns(2)
 
@@ -658,6 +702,9 @@ def edit_exercise_modal(exercise_data):
                 'Rest': new_rest,
                 'Comments': new_comments,
                 'Phase': new_phase,
+                'Categories': new_categories,
+                'Mandatory': new_mandatory,
+                'ExcludeFromPlan': new_exclude_from_plan,
             }
             with st.spinner("Saving…"):
                 success = update_exercise(exercise_id, payload)
@@ -697,6 +744,11 @@ with tab_library:
     _browse_cols = ['name', 'type', 'sets', 'reps', 'time', 'rest', 'comments']
     _browse_cols = [c for c in _browse_cols if c in df_dict.columns]
 
+    if "last_exercise_selection" not in st.session_state:
+        st.session_state.last_exercise_selection = {}
+
+    modal_opened_this_run = False
+
     phase_tabs = st.tabs(PipelineConfig.ALLOWED_PHASES)
     for tab, phase in zip(phase_tabs, PipelineConfig.ALLOWED_PHASES):
         with tab:
@@ -715,8 +767,115 @@ with tab_library:
             )
 
             selected_rows = event.selection.rows
-            selection_signature = f"{phase}:{selected_rows}"
+            is_new_selection = bool(selected_rows) and st.session_state.last_exercise_selection.get(phase) != selected_rows
 
-            if selected_rows and st.session_state.get("last_exercise_selection") != selection_signature:
-                st.session_state.last_exercise_selection = selection_signature
+            if is_new_selection and not modal_opened_this_run:
+                st.session_state.last_exercise_selection[phase] = selected_rows
+                modal_opened_this_run = True
                 edit_exercise_modal(phase_df.iloc[selected_rows[0]])
+
+
+with tab_goals:
+    if active_goal is None:
+        st.markdown("*Set a grade goal and get a generated training plan to reach it.*")
+
+        target_type_label = st.radio("Grade system", ["Gym", "Moonboard"], horizontal=True)
+        target_type = 'gym' if target_type_label == 'Gym' else 'moonboard'
+        grade_opts = list(PipelineConfig.GYM_MAPPING.keys() if target_type == 'gym' else PipelineConfig.MOONBOARD_MAPPING.keys())
+        target_grade = st.selectbox("Target grade", grade_opts, index=len(grade_opts) - 1)
+        selected_days = st.multiselect("Training days", PlanConfig.WEEKDAY_NAMES)
+        training_weekdays = {PlanConfig.WEEKDAY_NAMES.index(name) for name in selected_days}
+
+        if st.button("Preview Plan", use_container_width=True, disabled=not training_weekdays):
+            st.session_state.plan_preview = preview_plan(target_type, target_grade, training_weekdays, df_past, df_dict)
+            st.session_state.plan_preview_params = (target_type, target_grade, training_weekdays)
+        if not training_weekdays:
+            st.caption("Pick at least one training day to preview a plan.")
+
+        preview = st.session_state.get('plan_preview')
+        if preview is not None:
+            if preview.get('already_at_target'):
+                st.success(f"You've already reached {target_grade} - no plan needed.")
+            else:
+                weeks_per_step = preview.get('weeks_per_step')
+                if weeks_per_step is not None:
+                    st.caption(f"Pace: {weeks_per_step:.1f} weeks/grade step, from your own history")
+                else:
+                    st.caption("Pace: using the default model (gets longer for higher grades)")
+
+                neglect_scores = preview.get('neglect_scores') or {}
+                most_neglected = max(neglect_scores, key=neglect_scores.get, default=None)
+                if most_neglected is not None and neglect_scores[most_neglected] > 0.1:
+                    st.caption(f"{most_neglected} is trained least relative to your other categories — weighted up in this plan")
+
+                st.markdown(f"**{preview['total_weeks']}-week plan**")
+                for phase in preview['phase_breakdown']:
+                    weeks = phase['end_week'] - phase['start_week'] + 1
+                    mix = ", ".join(f"{cat} {int(w * 100)}%" for cat, w in phase['weights'].items())
+                    st.write(f"**{phase['name']}** (weeks {phase['start_week']}-{phase['end_week']}, {weeks}w): {mix}")
+
+                if st.button("Confirm & Generate Plan", use_container_width=True):
+                    saved_type, saved_grade, saved_weekdays = st.session_state.plan_preview_params
+                    with st.spinner("Generating your plan…"):
+                        success = create_goal_and_plan(saved_type, saved_grade, saved_weekdays, df_past, df_future, df_dict)
+                    if success:
+                        fetch_data.clear()
+                        fetch_goal.clear()
+                        st.session_state.pop('plan_preview', None)
+                        st.rerun()
+    else:
+        created_at = pd.to_datetime(active_goal['created_at']).normalize()
+        today = pd.to_datetime('today').normalize()
+        elapsed_weeks = (today - created_at).days / 7
+        current_week = min(active_goal['total_weeks'], int(elapsed_weeks) + 1)
+        current_phase = next(
+            (p['name'] for p in active_goal['phase_breakdown'] if p['start_week'] <= current_week <= p['end_week']),
+            active_goal['phase_breakdown'][-1]['name'],
+        )
+        st.markdown(f"**Goal:** {active_goal['target_grade']} ({active_goal['target_type']})")
+        st.write(f"Week {current_week} of {active_goal['total_weeks']} — {current_phase} phase")
+        st.markdown(
+            theme.phase_timeline_html(active_goal['phase_breakdown'], active_goal['total_weeks'], elapsed_weeks),
+            unsafe_allow_html=True,
+        )
+
+        col_regen, col_abandon = st.columns(2)
+        with col_regen:
+            if st.button("🔄 Regenerate Plan", use_container_width=True):
+                st.session_state.confirm_regenerate_goal = True
+        with col_abandon:
+            if st.button("✖️ Abandon Goal", use_container_width=True):
+                st.session_state.confirm_abandon_goal = True
+
+        if st.session_state.get('confirm_regenerate_goal'):
+            st.warning("Re-roll the remaining weeks of this plan? Future, not-yet-logged sessions from this goal will be replaced.")
+            col_yes, col_no = st.columns(2)
+            with col_yes:
+                if st.button("⚠️ Yes, regenerate", use_container_width=True):
+                    with st.spinner("Regenerating…"):
+                        success = regenerate_plan(active_goal, df_past, df_future, df_dict)
+                    st.session_state.pop('confirm_regenerate_goal', None)
+                    if success:
+                        fetch_data.clear()
+                        st.rerun()
+            with col_no:
+                if st.button("Cancel", use_container_width=True, key="cancel_regenerate_goal"):
+                    st.session_state.pop('confirm_regenerate_goal', None)
+                    st.rerun()
+
+        if st.session_state.get('confirm_abandon_goal'):
+            st.warning("Abandon this goal? Future, not-yet-logged sessions from it will be deleted. Already-logged sessions stay as real history.")
+            col_yes, col_no = st.columns(2)
+            with col_yes:
+                if st.button("⚠️ Yes, abandon", use_container_width=True):
+                    with st.spinner("Abandoning…"):
+                        success = abandon_goal(active_goal['id'], df_future)
+                    st.session_state.pop('confirm_abandon_goal', None)
+                    if success:
+                        fetch_data.clear()
+                        fetch_goal.clear()
+                        st.rerun()
+            with col_no:
+                if st.button("Cancel", use_container_width=True, key="cancel_abandon_goal"):
+                    st.session_state.pop('confirm_abandon_goal', None)
+                    st.rerun()
