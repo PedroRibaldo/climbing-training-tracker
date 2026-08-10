@@ -92,11 +92,18 @@ def require_login() -> bool:
     return False
 
 
+def end_session() -> None:
+    """Clears the refresh-token cookie and local session state. Shared by
+    the logout button and, after a successful account deletion, by
+    ui/profile_panel.py."""
+    _cookies().remove(REFRESH_TOKEN_COOKIE)
+    log_out()
+
+
 def render_logout_control() -> None:
     """Sidebar element showing the logged-in email and a logout button."""
     with st.sidebar:
         st.caption(f":material/account_circle: Logged in as {st.session_state.auth_user_email}")
         if st.button("Log out", icon=":material/logout:", width="stretch"):
-            _cookies().remove(REFRESH_TOKEN_COOKIE)
-            log_out()
+            end_session()
             st.rerun()

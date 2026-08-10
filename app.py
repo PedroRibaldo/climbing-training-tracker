@@ -13,9 +13,10 @@ import pandas as pd
 
 from data_pipeline import load_clean_data, compute_kpis
 from training_plan import get_active_goal, check_and_update_goal_completion
+from user_profile import get_profile, list_injuries, current_grade_for
 import theme
 
-from ui import auth_gate, session_modal, calendar_tab, analytics_tab, library_tab, goals_tab
+from ui import auth_gate, session_modal, calendar_tab, analytics_tab, library_tab, goals_tab, profile_panel
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Climbing Training Tracker", page_icon=":material/terrain:", layout="wide")
@@ -101,6 +102,16 @@ def fetch_goal(_client):
     """Cached wrapper around get_active_goal(), mirroring fetch_data()."""
     return get_active_goal(_client)
 
+@st.cache_data
+def fetch_profile(_client):
+    """Cached wrapper around get_profile(), mirroring fetch_goal()."""
+    return get_profile(_client, st.session_state.auth_user_id)
+
+@st.cache_data
+def fetch_injuries(_client):
+    """Cached wrapper around list_injuries(), mirroring fetch_goal()."""
+    return list_injuries(_client)
+
 def refresh_data():
     """Clear the cached session/exercise data. Callers decide when to
     st.rerun() themselves, since some paths need custom post-save behavior
@@ -112,9 +123,22 @@ def refresh_all():
     fetch_data.clear()
     fetch_goal.clear()
 
+def refresh_athlete_profile():
+    """Clear the cached profile data."""
+    fetch_profile.clear()
+
+def refresh_injuries():
+    """Clear the cached injuries data."""
+    fetch_injuries.clear()
+
+profile = fetch_profile(client)
+injuries = fetch_injuries(client)
+profile_panel.render(client, st.session_state.auth_user_id, profile, injuries, refresh_athlete_profile, refresh_injuries)
+
 active_goal = fetch_goal(client)
 if active_goal is not None:
-    if check_and_update_goal_completion(client, active_goal, df_past, df_future):
+    current_grade = current_grade_for(profile, active_goal['target_type'])
+    if check_and_update_goal_completion(client, active_goal, current_grade, df_future):
         refresh_all()
         st.rerun()
 
@@ -177,4 +201,4 @@ with tab_library:
     library_tab.render(client, df_dict, refresh_data)
 
 with tab_goals:
-    goals_tab.render(client, active_goal, df_past, df_future, df_dict, refresh_data, refresh_all)
+    goals_tab.render(client, active_goal, df_past, df_future, df_dict, profile, refresh_data, refresh_all)

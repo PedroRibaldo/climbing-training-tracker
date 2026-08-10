@@ -13,7 +13,10 @@ function that talks to Supabase takes a client as its first argument -
 see auth/client.py for how one gets constructed.
 """
 
-from .models import PipelineConfig, SessionRecord, ExerciseRecord, _validate_records
+from .models import (
+    PipelineConfig, SessionRecord, ExerciseRecord, _validate_records,
+    _validate_membership, _require_nonblank_string,
+)
 from .cleaning import (
     _clean_write_value, _to_iso_date, _flatten_session_row, _flatten_exercise_row,
     load_clean_data, clean_data,

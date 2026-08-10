@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from data_pipeline import PipelineConfig
 from .algorithm import (
-    PlanConfig, GoalRecord, preview_plan, _current_best_grade, _category_effort_overrides,
+    PlanConfig, GoalRecord, preview_plan, _category_effort_overrides,
     _generate_days_for_range, _recent_daily_loads,
 )
 
@@ -71,7 +71,7 @@ def _write_scheduled_sessions(
 
 
 def create_goal_and_plan(
-    client, target_type: str, target_grade: str, training_weekdays: set[int],
+    client, current_grade: Optional[str], target_type: str, target_grade: str, training_weekdays: set[int],
     df_past: pd.DataFrame, df_future: pd.DataFrame, df_dict: pd.DataFrame, config: Optional[PipelineConfig] = None,
 ) -> bool:
     """Creates a goal and its scheduled sessions, skipping days that
@@ -79,7 +79,7 @@ def create_goal_and_plan(
     if config is None:
         config = PipelineConfig()
 
-    plan = preview_plan(target_type, target_grade, training_weekdays, df_past, df_dict, config)
+    plan = preview_plan(current_grade, target_type, target_grade, training_weekdays, df_past, df_dict, config)
     if plan.get('already_at_target'):
         st.warning(f"You've already reached {target_grade} for {target_type} - no plan needed.")
         return False
@@ -96,7 +96,7 @@ def create_goal_and_plan(
         goal_response = client.table(PlanConfig.GOALS_TABLE).insert({
             'target_type': target_type,
             'target_grade': target_grade,
-            'start_grade': _current_best_grade(df_past, target_type, config),
+            'start_grade': current_grade,
             'weekly_frequency': len(training_weekdays),
             'training_weekdays': [PlanConfig.WEEKDAY_NAMES[i] for i in sorted(training_weekdays)],
             'total_weeks': plan['total_weeks'],
@@ -187,7 +187,7 @@ def abandon_goal(client, goal_id: int, df_future: pd.DataFrame, config: Optional
 
 
 def check_and_update_goal_completion(
-    client, goal: dict, df_past: pd.DataFrame, df_future: pd.DataFrame, config: Optional[PipelineConfig] = None,
+    client, goal: dict, current_grade: Optional[str], df_future: pd.DataFrame, config: Optional[PipelineConfig] = None,
 ) -> bool:
     """Marks the goal completed and cleans up remaining sessions if the
     target grade's been reached. Returns True if it just changed."""
@@ -195,7 +195,6 @@ def check_and_update_goal_completion(
         config = PipelineConfig()
     grade_mapping = PipelineConfig.GYM_MAPPING if goal['target_type'] == 'gym' else PipelineConfig.MOONBOARD_MAPPING
     target_ordinal = grade_mapping[goal['target_grade']]
-    current_grade = _current_best_grade(df_past, goal['target_type'], config)
     current_ordinal = grade_mapping.get(current_grade, -1)
     if current_ordinal < target_ordinal:
         return False

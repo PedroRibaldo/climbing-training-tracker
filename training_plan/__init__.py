@@ -18,7 +18,7 @@ from .algorithm import (
     apply_acwr_guardrail, select_exercises_for_day, generate_plan, preview_plan,
     _adjust_weights_for_neglect, _training_day_slots, _swrr_pick, _simulated_acwr,
     _downgrade_if_needed, _category_neglect_scores, _historical_weeks_per_step,
-    _category_effort_overrides, _rotate_pick, _bool_col, _current_best_grade,
+    _category_effort_overrides, _rotate_pick, _bool_col,
     _recent_daily_loads, _generate_days_for_range,
 )
 from .store import (

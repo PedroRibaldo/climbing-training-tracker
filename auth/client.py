@@ -12,23 +12,40 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 
 
-def new_client() -> Client:
-    """A fresh Supabase client, authenticated with the anon key only. Used
-    both for login/signup attempts and, after a successful one, as the
-    per-session client stored in st.session_state."""
+def _client_for(secrets_field: str, env_var: str, error_hint: str) -> Client:
+    """Builds a Supabase client from Streamlit secrets (preferred) or a
+    local .env fallback. secrets_field selects which key under
+    st.secrets['supabase'] to use; error_hint names what's missing if
+    neither source has it."""
     load_dotenv()  # no-op if there's no .env file
 
     try:
         if "supabase" in st.secrets:
-            return create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
+            return create_client(st.secrets["supabase"]["url"], st.secrets["supabase"][secrets_field])
     except Exception:
         pass
 
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_KEY")
+    key = os.environ.get(env_var)
     if not url or not key:
         raise RuntimeError(
-            "Supabase credentials not found. Set SUPABASE_URL/SUPABASE_KEY in a .env file "
-            "for local dev, or add a [supabase] url/key block to Streamlit secrets in the cloud."
+            f"Supabase {error_hint} not found. Set SUPABASE_URL/{env_var} in a .env file "
+            f"for local dev, or add a [supabase] url/{secrets_field} block to Streamlit secrets in the cloud."
         )
     return create_client(url, key)
+
+
+def new_client() -> Client:
+    """A fresh Supabase client, authenticated with the anon key only. Used
+    both for login/signup attempts and, after a successful one, as the
+    per-session client stored in st.session_state."""
+    return _client_for("key", "SUPABASE_KEY", "credentials")
+
+
+def new_admin_client() -> Client:
+    """A service-role client for admin-only operations (currently just
+    account deletion). Never stored in st.session_state or reused for
+    anything else - a service-role key bypasses Row-Level Security
+    entirely, so every other call in the app must keep using the
+    anon-key client from new_client()."""
+    return _client_for("service_role_key", "SUPABASE_SERVICE_ROLE_KEY", "service-role credentials")

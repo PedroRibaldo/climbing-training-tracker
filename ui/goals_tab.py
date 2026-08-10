@@ -8,23 +8,27 @@ import streamlit as st
 
 from data_pipeline import PipelineConfig
 from training_plan import PlanConfig, preview_plan, create_goal_and_plan, regenerate_plan, abandon_goal
+from user_profile import current_grade_for
 import theme
 
 
-def render(client, active_goal, df_past, df_future, df_dict, refresh_data, refresh_all):
+def render(client, active_goal, df_past, df_future, df_dict, profile, refresh_data, refresh_all):
     if active_goal is None:
         st.caption("Set a grade goal and get a generated training plan to reach it.")
 
         target_type_label = st.radio("Grade system", ["Gym", "Moonboard"], horizontal=True)
         target_type = 'gym' if target_type_label == 'Gym' else 'moonboard'
+        current_grade = current_grade_for(profile, target_type)
+        if current_grade is None:
+            st.caption("Set your current grade in the sidebar's Profile & settings panel for a personalized starting point.")
         grade_opts = list(PipelineConfig.GYM_MAPPING.keys() if target_type == 'gym' else PipelineConfig.MOONBOARD_MAPPING.keys())
         target_grade = st.selectbox("Target grade", grade_opts, index=len(grade_opts) - 1)
         selected_days = st.multiselect("Training days", PlanConfig.WEEKDAY_NAMES)
         training_weekdays = {PlanConfig.WEEKDAY_NAMES.index(name) for name in selected_days}
 
         if st.button("Preview plan", icon=":material/visibility:", width="stretch", disabled=not training_weekdays):
-            st.session_state.plan_preview = preview_plan(target_type, target_grade, training_weekdays, df_past, df_dict)
-            st.session_state.plan_preview_params = (target_type, target_grade, training_weekdays)
+            st.session_state.plan_preview = preview_plan(current_grade, target_type, target_grade, training_weekdays, df_past, df_dict)
+            st.session_state.plan_preview_params = (current_grade, target_type, target_grade, training_weekdays)
         if not training_weekdays:
             st.caption("Pick at least one training day to preview a plan.")
 
@@ -51,9 +55,9 @@ def render(client, active_goal, df_past, df_future, df_dict, refresh_data, refre
                     st.write(f"**{phase['name']}** (weeks {phase['start_week']}-{phase['end_week']}, {weeks}w): {mix}")
 
                 if st.button("Confirm & generate plan", icon=":material/check_circle:", type="primary", width="stretch"):
-                    saved_type, saved_grade, saved_weekdays = st.session_state.plan_preview_params
+                    saved_current_grade, saved_type, saved_grade, saved_weekdays = st.session_state.plan_preview_params
                     with st.spinner("Generating your plan…"):
-                        success = create_goal_and_plan(client, saved_type, saved_grade, saved_weekdays, df_past, df_future, df_dict)
+                        success = create_goal_and_plan(client, saved_current_grade, saved_type, saved_grade, saved_weekdays, df_past, df_future, df_dict)
                     if success:
                         refresh_all()
                         st.session_state.pop('plan_preview', None)
@@ -69,6 +73,7 @@ def render(client, active_goal, df_past, df_future, df_dict, refresh_data, refre
         )
         st.markdown(f"**Goal:** {active_goal['target_grade']} ({active_goal['target_type']})")
         st.write(f"Week {current_week} of {active_goal['total_weeks']} - {current_phase} phase")
+        st.caption(f"Reached {active_goal['target_grade']}? Update your grade in the sidebar's Profile & settings panel to complete this goal.")
         st.html(theme.phase_timeline_html(active_goal['phase_breakdown'], active_goal['total_weeks'], elapsed_weeks))
 
         col_regen, col_abandon = st.columns(2)
