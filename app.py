@@ -14,6 +14,7 @@ import pandas as pd
 from data_pipeline import load_clean_data, compute_kpis
 from training_plan import get_active_goal, check_and_update_goal_completion
 from user_profile import get_profile, list_injuries, current_grade_for
+from gyms import list_gyms, get_user_memberships
 import theme
 
 from ui import auth_gate, session_modal, calendar_tab, analytics_tab, library_tab, goals_tab, profile_panel
@@ -119,6 +120,16 @@ def fetch_injuries(_client, user_id):
     """Cached wrapper around list_injuries(), mirroring fetch_goal()."""
     return list_injuries(_client)
 
+@st.cache_data
+def fetch_gyms(_client, user_id):
+    """Cached wrapper around list_gyms(), mirroring fetch_goal()."""
+    return list_gyms(_client)
+
+@st.cache_data
+def fetch_my_memberships(_client, user_id):
+    """Cached wrapper around get_user_memberships(), mirroring fetch_goal()."""
+    return get_user_memberships(_client)
+
 def refresh_data():
     """Clear the cached session/exercise data. Callers decide when to
     st.rerun() themselves, since some paths need custom post-save behavior
@@ -138,9 +149,18 @@ def refresh_injuries():
     """Clear the cached injuries data."""
     fetch_injuries.clear()
 
+def refresh_my_memberships():
+    """Clear the cached gym-membership data."""
+    fetch_my_memberships.clear()
+
 profile = fetch_profile(client, st.session_state.auth_user_id)
 injuries = fetch_injuries(client, st.session_state.auth_user_id)
-profile_panel.render(client, st.session_state.auth_user_id, profile, injuries, refresh_athlete_profile, refresh_injuries)
+gyms_list = fetch_gyms(client, st.session_state.auth_user_id)
+memberships = fetch_my_memberships(client, st.session_state.auth_user_id)
+profile_panel.render(
+    client, st.session_state.auth_user_id, profile, injuries, gyms_list, memberships,
+    refresh_athlete_profile, refresh_injuries, refresh_my_memberships,
+)
 
 active_goal = fetch_goal(client, st.session_state.auth_user_id)
 if active_goal is not None:

@@ -8,6 +8,7 @@ import streamlit as st
 
 from data_pipeline import PipelineConfig
 from user_profile import update_profile, upload_avatar, add_injury, resolve_injury
+from gyms import list_gyms, get_user_memberships, join_gym, list_gym_members, update_member_role, ALL_ROLES
 from auth import change_password, change_email, delete_account
 from ui.auth_gate import end_session
 import theme
@@ -59,6 +60,59 @@ def _render_athlete_fields(client, user_id, profile, refresh_athlete_profile):
         if success:
             refresh_athlete_profile()
             st.rerun()
+
+
+def _render_gyms(client, memberships, gyms_list, refresh_memberships):
+    st.markdown("**My gyms**")
+    if not memberships:
+        st.caption("You haven't joined a gym yet.")
+    for membership in memberships:
+        st.write(f"{membership['gym_name']} — _{membership['role']}_")
+
+    joined_gym_ids = {m['gym_id'] for m in memberships}
+    joinable = [g for g in gyms_list if g['id'] not in joined_gym_ids]
+    if joinable:
+        gym_to_join = st.selectbox(
+            "Join a gym", joinable, format_func=lambda g: g['name'], key="profile_join_gym_select",
+        )
+        if st.button("Join", icon=":material/add:", width="stretch", key="profile_join_gym_button"):
+            with st.spinner("Joining…"):
+                success = join_gym(client, gym_to_join['id'])
+            if success:
+                refresh_memberships()
+                st.rerun()
+    else:
+        st.caption("No more gyms to join.")
+
+
+def _render_gym_admin(client, memberships):
+    admin_memberships = [m for m in memberships if m['role'] == 'admin']
+    if not admin_memberships:
+        return
+    st.markdown("**Manage members**")
+    for membership in admin_memberships:
+        with st.expander(membership['gym_name']):
+            members = list_gym_members(client, membership['gym_id'])
+            for member in members:
+                col_name, col_role, col_save = st.columns([2, 2, 1])
+                with col_name:
+                    st.write(member.get('display_name') or member['user_id'])
+                with col_role:
+                    new_role = st.selectbox(
+                        "Role", ALL_ROLES, index=ALL_ROLES.index(member['role']),
+                        label_visibility="collapsed", key=f"member_role_{member['id']}",
+                    )
+                with col_save:
+                    if st.button("Save", key=f"save_member_role_{member['id']}", width="stretch"):
+                        if new_role != member['role']:
+                            with st.spinner("Updating…"):
+                                success = update_member_role(client, member['id'], new_role)
+                            # No st.rerun() here: it would restart the script
+                            # before the browser ever paints this message -
+                            # same reason _render_account's "Password
+                            # changed." message below doesn't rerun either.
+                            if success:
+                                st.success(f"Role updated to {new_role}.")
 
 
 def _render_injuries(client, injuries, refresh_injuries):
@@ -139,10 +193,13 @@ def _render_account(client, user_id):
                 st.rerun()
 
 
-def render(client, user_id, profile, injuries, refresh_athlete_profile, refresh_injuries):
+def render(client, user_id, profile, injuries, gyms_list, memberships, refresh_athlete_profile, refresh_injuries, refresh_memberships):
     with st.sidebar:
         with st.expander("Profile & settings", icon=":material/account_circle:"):
             _render_athlete_fields(client, user_id, profile, refresh_athlete_profile)
+            st.divider()
+            _render_gyms(client, memberships, gyms_list, refresh_memberships)
+            _render_gym_admin(client, memberships)
             st.divider()
             _render_injuries(client, injuries, refresh_injuries)
             st.divider()
