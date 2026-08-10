@@ -88,27 +88,27 @@ auth_gate.render_logout_control()
 
 # --- DATA LOADING ---
 @st.cache_data
-def fetch_data(_client):
+def fetch_data(_client, user_id):
     """Cached wrapper around load_clean_data() so every rerun doesn't hit
     Supabase. Cleared explicitly after any write (see the
     modal's save/delete/add actions below)."""
     return load_clean_data(_client)
 
 with st.spinner("Loading your training data…"):
-    df_past, df_future, df_dict = fetch_data(client)
+    df_past, df_future, df_dict = fetch_data(client, st.session_state.auth_user_id)
 
 @st.cache_data
-def fetch_goal(_client):
+def fetch_goal(_client, user_id):
     """Cached wrapper around get_active_goal(), mirroring fetch_data()."""
     return get_active_goal(_client)
 
 @st.cache_data
-def fetch_profile(_client):
+def fetch_profile(_client, user_id):
     """Cached wrapper around get_profile(), mirroring fetch_goal()."""
-    return get_profile(_client, st.session_state.auth_user_id)
+    return get_profile(_client, user_id)
 
 @st.cache_data
-def fetch_injuries(_client):
+def fetch_injuries(_client, user_id):
     """Cached wrapper around list_injuries(), mirroring fetch_goal()."""
     return list_injuries(_client)
 
@@ -131,11 +131,11 @@ def refresh_injuries():
     """Clear the cached injuries data."""
     fetch_injuries.clear()
 
-profile = fetch_profile(client)
-injuries = fetch_injuries(client)
+profile = fetch_profile(client, st.session_state.auth_user_id)
+injuries = fetch_injuries(client, st.session_state.auth_user_id)
 profile_panel.render(client, st.session_state.auth_user_id, profile, injuries, refresh_athlete_profile, refresh_injuries)
 
-active_goal = fetch_goal(client)
+active_goal = fetch_goal(client, st.session_state.auth_user_id)
 if active_goal is not None:
     current_grade = current_grade_for(profile, active_goal['target_type'])
     if check_and_update_goal_completion(client, active_goal, current_grade, df_future):

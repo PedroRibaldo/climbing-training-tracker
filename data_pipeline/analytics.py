@@ -22,12 +22,13 @@ def compute_acwr(df_past: pd.DataFrame, acute_window: int = 7, chronic_window: i
     Returns a DataFrame indexed by date with columns:
     daily_load, acute_load, chronic_load, acwr.
     """
+    empty_index = pd.DatetimeIndex([], name='date')
     if df_past.empty:
-        return pd.DataFrame(columns=['daily_load', 'acute_load', 'chronic_load', 'acwr'])
+        return pd.DataFrame(columns=['daily_load', 'acute_load', 'chronic_load', 'acwr'], index=empty_index)
 
     sessions_with_effort = df_past.dropna(subset=['effort'])
     if sessions_with_effort.empty:
-        return pd.DataFrame(columns=['daily_load', 'acute_load', 'chronic_load', 'acwr'])
+        return pd.DataFrame(columns=['daily_load', 'acute_load', 'chronic_load', 'acwr'], index=empty_index)
 
     daily_load = sessions_with_effort.groupby(
         sessions_with_effort['date'].dt.normalize()
