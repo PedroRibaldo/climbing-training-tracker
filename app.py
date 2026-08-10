@@ -58,6 +58,13 @@ st.html(f"""
 .fc-daygrid-day-frame {{
     cursor: pointer;
 }}
+/* Empty days (no logged/scheduled session) get a persistent, faint tint
+   marking them as "click to add" - the :hover brightness boost below is
+   invisible on touch devices, so without this, mobile users have no cue
+   the calendar is interactive beyond the caption above it. */
+.fc-daygrid-day:not(:has(.fc-bg-event)) .fc-daygrid-day-frame {{
+    background-color: color-mix(in srgb, {theme.ACCENT} 6%, transparent);
+}}
 @media (prefers-reduced-motion: no-preference) {{
     .fc-daygrid-day-frame {{
         transition: filter 150ms ease;
@@ -164,7 +171,11 @@ with st.container(horizontal=True):
     st.metric(":material/date_range: This week", kpis['sessions_this_week'], border=True)
     acwr_value = "–" if kpis['acwr_current'] is None else f"{kpis['acwr_current']:.2f}"
     acwr_delta = None if kpis['acwr_delta'] is None else f"{kpis['acwr_delta']:+.2f}"
-    st.metric(":material/monitoring: ACWR", acwr_value, delta=acwr_delta, delta_color="inverse", border=True)
+    st.metric(
+        ":material/monitoring: ACWR", acwr_value, delta=acwr_delta, delta_color="inverse", border=True,
+        help="Acute:Chronic Workload Ratio - your last 7 days of training load vs. your 28-day baseline. "
+             "0.8-1.3 is the sweet spot; above 1.5 is a spike in injury risk. See the Analytics tab for the trend.",
+    )
     since_last = "–" if kpis['days_since_last'] is None else f"{kpis['days_since_last']} d"
     st.metric(":material/schedule: Since last session", since_last, border=True)
 

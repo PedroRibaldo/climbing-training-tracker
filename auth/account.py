@@ -10,7 +10,7 @@ from typing import Optional
 import streamlit as st
 from supabase_auth.errors import AuthApiError
 
-from .client import new_admin_client
+from .client import new_admin_client, reassert_session
 
 
 def change_password(client, new_password: str) -> Optional[str]:
@@ -20,6 +20,7 @@ def change_password(client, new_password: str) -> Optional[str]:
         client.auth.update_user({"password": new_password})
     except AuthApiError as exc:
         return exc.message
+    reassert_session(client)
     return None
 
 
@@ -31,6 +32,7 @@ def change_email(client, new_email: str) -> Optional[str]:
         client.auth.update_user({"email": new_email})
     except AuthApiError as exc:
         return exc.message
+    reassert_session(client)
     return None
 
 

@@ -61,7 +61,8 @@ Every row fetched from Supabase is validated with Pydantic before it reaches the
 ├── theme.py
 ├── auth/                        # Supabase Auth: login, signup, logout, session restore
 │   ├── client.py
-│   └── session.py
+│   ├── session.py
+│   └── account.py               # Password/email change, account deletion
 ├── data_pipeline/               # Supabase I/O, Pydantic validation, data cleaning, analytics
 │   ├── models.py
 │   ├── cleaning.py
@@ -71,6 +72,9 @@ Every row fetched from Supabase is validated with Pydantic before it reaches the
 ├── training_plan/               # Training-plan generation engine
 │   ├── algorithm.py
 │   └── store.py
+├── user_profile/                # Athlete profile (body metrics, grades, avatar) and injury log
+│   ├── models.py
+│   └── store.py
 ├── ui/                          # Tab and modal rendering, one module per screen
 │   ├── auth_gate.py
 │   ├── session_modal.py
@@ -78,11 +82,15 @@ Every row fetched from Supabase is validated with Pydantic before it reaches the
 │   ├── calendar_tab.py
 │   ├── analytics_tab.py
 │   ├── library_tab.py
-│   └── goals_tab.py
+│   ├── goals_tab.py
+│   └── profile_panel.py
+├── database_migration/          # One-off script that migrated legacy Google Sheets data to Supabase
+│   └── migrate_to_supabase.py
 ├── .streamlit/config.toml       # Streamlit theme configuration
 ├── tests/
 │   ├── test_data_pipeline.py    # Validation, cleaning, and analytics tests
-│   └── test_training_plan.py    # Training-plan generation engine tests
+│   ├── test_training_plan.py    # Training-plan generation engine tests
+│   └── test_user_profile.py     # Profile/injury validation tests
 ├── requirements.txt
 ├── requirements-dev.txt
 └── .env                         # Local Supabase credentials

@@ -8,7 +8,7 @@ from typing import Optional
 import streamlit as st
 from supabase_auth.errors import AuthApiError
 
-from .client import new_client
+from .client import new_client, reassert_session
 
 REFRESH_TOKEN_COOKIE = "ctt_refresh_token"
 COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30  # 30 days
@@ -70,6 +70,50 @@ def restore_session(refresh_token: str) -> bool:
         return False
     _store_session(client, response.session)
     return True
+
+
+def request_password_reset(email: str) -> Optional[str]:
+    """Sends a password-reset email via Supabase. Returns an error message,
+    or None on success - including when the email doesn't belong to any
+    account, matching Supabase's own default behavior of not revealing
+    which emails are registered."""
+    client = new_client()
+    try:
+        client.auth.reset_password_for_email(email)
+    except AuthApiError as exc:
+        return exc.message
+    return None
+
+
+def complete_password_reset(
+    access_token: str, refresh_token: str, new_password: str,
+) -> tuple[Optional[str], Optional[str]]:
+    """Sets the new password using the recovery session Supabase's reset
+    email hands back. Supabase's default template points at its own
+    /auth/v1/verify endpoint, which verifies the one-time token server-side
+    and then redirects the browser to redirect_to with the resulting
+    session appended as a URL *fragment*
+    (#access_token=...&refresh_token=...&type=recovery) - never a query
+    param, and never sent to any server. auth_gate.py recovers it
+    client-side (see _RECOVERY_HASH_SCRIPT) and passes it in here.
+
+    Returns (error_message, refresh_token) - exactly one is None. On
+    success the session is already stored in st.session_state, mirroring
+    log_in()."""
+    client = new_client()
+    try:
+        response = client.auth.set_session(access_token, refresh_token)
+    except Exception:
+        return "This reset link is invalid or has expired. Request a new one.", None
+    if not response.session:
+        return "This reset link is invalid or has expired. Request a new one.", None
+    try:
+        client.auth.update_user({"password": new_password})
+    except AuthApiError as exc:
+        return exc.message, None
+    reassert_session(client)
+    _store_session(client, response.session)
+    return None, response.session.refresh_token
 
 
 def log_out() -> None:

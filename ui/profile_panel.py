@@ -10,6 +10,7 @@ from data_pipeline import PipelineConfig
 from user_profile import update_profile, upload_avatar, add_injury, resolve_injury
 from auth import change_password, change_email, delete_account
 from ui.auth_gate import end_session
+import theme
 
 
 def _grade_selectbox(label, options, current_value, key):
@@ -39,6 +40,8 @@ def _render_athlete_fields(client, user_id, profile, refresh_athlete_profile):
     gym_grade = _grade_selectbox(
         "Current gym grade", list(PipelineConfig.GYM_MAPPING.keys()), profile.get('current_gym_grade'), "profile_gym_grade",
     )
+    if gym_grade:
+        st.html(theme.grade_swatch_html(gym_grade))
     moonboard_grade = _grade_selectbox(
         "Current moonboard grade", list(PipelineConfig.MOONBOARD_MAPPING.keys()), profile.get('current_moonboard_grade'), "profile_moonboard_grade",
     )

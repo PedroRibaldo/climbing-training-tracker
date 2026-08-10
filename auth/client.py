@@ -49,3 +49,20 @@ def new_admin_client() -> Client:
     entirely, so every other call in the app must keep using the
     anon-key client from new_client()."""
     return _client_for("service_role_key", "SUPABASE_SERVICE_ROLE_KEY", "service-role credentials")
+
+
+def reassert_session(client: Client) -> None:
+    """Works around a bug in this pinned supabase-py version: client.auth.
+    update_user() (used by change_password/change_email/password reset)
+    fires a "USER_UPDATED" auth event, but the Client's auth-state
+    listener only re-attaches the authenticated JWT to the client's
+    Authorization header for SIGNED_IN/TOKEN_REFRESHED/SIGNED_OUT - for
+    anything else, including USER_UPDATED, it silently resets the header
+    back to the anon key. Every table query after that point then looks
+    unauthenticated to Row-Level Security and just returns 0 rows instead
+    of raising, rather than actually failing loudly. Call this right
+    after any update_user() call to restore the correct header by
+    re-firing a TOKEN_REFRESHED event."""
+    session = client.auth.get_session()
+    if session:
+        client.auth.set_session(session.access_token, session.refresh_token)

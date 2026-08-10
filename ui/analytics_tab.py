@@ -29,7 +29,8 @@ def render(df_past):
         mask = (df_past['date'].dt.date >= start_date) & (df_past['date'].dt.date <= end_date) & (df_past['category'] != 'Rest')
         df_analytics = df_past[mask].copy()
 
-        col1, col2, col3 = st.columns(3)
+        chart_row1 = st.container(key="analytics_chart_row1")
+        col1, col2, col3 = chart_row1.columns(3)
 
         with col1:
             st.subheader(":material/local_fire_department: Training intensity")
@@ -107,7 +108,8 @@ def render(df_past):
 
         st.subheader(":material/query_stats: Advanced analytics")
 
-        col4, col5 = st.columns(2)
+        chart_row2 = st.container(key="analytics_chart_row2")
+        col4, col5 = chart_row2.columns(2)
 
         with col4:
             st.markdown("**:material/monitoring: Acute:Chronic Workload Ratio**")
@@ -178,7 +180,14 @@ def render(df_past):
                     st.markdown(f"**{session['date'].strftime('%d/%m/%Y')}**")
                     st.caption(session['category'])
                     if session['gym_numeric'] != -1:
-                        st.markdown(f":material/terrain: Gym: {gym_rev_map.get(int(session['gym_numeric']), '-')}")
+                        gym_grade = gym_rev_map.get(int(session['gym_numeric']), '-')
+                        gym_color = theme.GRADE_COLORS.get(gym_grade, theme.CATEGORY_FALLBACK_COLOR)
+                        st.html(
+                            f'<div style="display:flex; align-items:center; gap:0.4rem; margin:0.2rem 0;">'
+                            f'<span style="width:10px; height:10px; border-radius:50%; background:{gym_color}; '
+                            f'display:inline-block; box-shadow:0 0 0 1px {theme.ROPE}; flex:none;"></span>'
+                            f'<span style="font-family:{theme.FONT_BODY};">Gym: {gym_grade}</span></div>'
+                        )
                     if session['moonboard_numeric'] != -1:
                         st.markdown(f":material/grid_view: Moonboard: {mb_rev_map.get(int(session['moonboard_numeric']), '-')}")
                     if pd.notna(session['effort']):

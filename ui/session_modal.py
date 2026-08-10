@@ -9,6 +9,7 @@ import streamlit as st
 
 from data_pipeline import PipelineConfig, update_session, add_session, delete_session
 from training_plan import select_exercises_for_day
+import theme
 
 
 def _category_exercise_pool(category, df_dict):
@@ -53,6 +54,8 @@ def _render_session_edit_form(
         gym_opts = [""] + list(PipelineConfig.GYM_MAPPING.keys())
         current_gym = session_data['gym_grade'] if pd.notna(session_data['gym_grade']) and session_data['gym_grade'] in gym_opts else ""
         new_gym = st.selectbox("Max gym grade", gym_opts, index=gym_opts.index(current_gym))
+        if new_gym:
+            st.html(theme.grade_swatch_html(new_gym))
 
         mb_opts = [""] + list(PipelineConfig.MOONBOARD_MAPPING.keys())
         current_mb = session_data['moonboard_grade'] if pd.notna(session_data['moonboard_grade']) and session_data['moonboard_grade'] in mb_opts else ""
