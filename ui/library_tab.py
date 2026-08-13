@@ -9,11 +9,11 @@ from data_pipeline import PipelineConfig
 from . import exercise_modals
 
 
-def render(client, df_dict, refresh_data):
+def render(df_dict, refresh_data):
     st.caption("Click any exercise below to edit or delete it.")
 
     if st.button("Add new exercise", icon=":material/add:", type="primary"):
-        exercise_modals.add_exercise_modal(client, df_dict, refresh_data)
+        exercise_modals.add_exercise_modal(df_dict, refresh_data)
 
     _browse_cols = ['name', 'type', 'sets', 'reps', 'time', 'rest', 'comments']
     _browse_cols = [c for c in _browse_cols if c in df_dict.columns]
@@ -46,4 +46,4 @@ def render(client, df_dict, refresh_data):
             if is_new_selection and not modal_opened_this_run:
                 st.session_state.last_exercise_selection[phase] = selected_rows
                 modal_opened_this_run = True
-                exercise_modals.edit_exercise_modal(client, phase_df.iloc[selected_rows[0]], refresh_data)
+                exercise_modals.edit_exercise_modal(phase_df.iloc[selected_rows[0]], refresh_data)

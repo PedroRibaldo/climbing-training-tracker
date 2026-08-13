@@ -27,11 +27,7 @@ GRADE_COLORS = {
     "Purple": "#9B5DE0",
     "Black": "#4A4540",
 }
-# A dedicated token rather than an alias to GRADE_COLORS["Red"] - the grade
-# red is a touch too dark to hit 4.5:1 text contrast on BASALT/CHALK_BAG
-# (measures ~4.3:1 / ~3.9:1), which matters here since this color is used
-# as button text/border, not just a background fill.
-DANGER = "#F0574A"
+DANGER = GRADE_COLORS["Red"]  # semantic alias for destructive actions (delete/abandon buttons)
 
 # --- Training category colors (deliberately distinct from GRADE_COLORS) ---
 CATEGORY_COLORS = {
@@ -75,25 +71,6 @@ PLOTLY_TEMPLATE = go.layout.Template(
         margin=dict(l=10, r=10, t=40, b=10),
     )
 )
-
-
-def grade_swatch_html(grade: str) -> str:
-    """A small inline wall-color swatch confirming which hold color a
-    selected gym grade maps to. Streamlit's selectbox can't render rich
-    per-option content, so this renders as a live confirmation right below
-    the dropdown instead - reusing the same visual language as
-    color_key_html() rather than leaving gym-grade pickers as plain text
-    when the rest of the app is built around these exact colors."""
-    if not grade or grade not in GRADE_COLORS:
-        return ""
-    color = GRADE_COLORS[grade]
-    return f"""
-<div style="display:inline-flex; align-items:center; gap:0.45rem; margin:-0.6rem 0 0.8rem 0.1rem;">
-    <span style="width:12px; height:12px; border-radius:50%; background:{color};
-                 display:inline-block; box-shadow:0 0 0 1px {ROPE};"></span>
-    <span class="grade-chip-label" style="color:{STONE}; font-size:0.78rem;">{grade}</span>
-</div>
-"""
 
 
 def color_key_html(colors: dict, title: str = "Color Key") -> str:
@@ -143,8 +120,6 @@ def inject_global_css() -> str:
     Return value is meant to be passed straight to st.html().
     """
     return f"""
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap');
 
@@ -200,58 +175,6 @@ code, .stCode, .grade-chip-label {{
     .stButton button:active {{
         transform: scale(0.97);
     }}
-}}
-
-/* Belt-and-suspenders alongside .streamlit/config.toml's toolbarMode -
-   hides any remaining "Made with Streamlit" footer/deploy chrome so the
-   app doesn't read as an unstyled template. */
-footer, #MainMenu, [data-testid="stDeployButton"] {{
-    visibility: hidden;
-    height: 0;
-}}
-
-/* Dark-theme scrollbar - default light-mode scrollbars read as an
-   unstyled leftover against BASALT. */
-::-webkit-scrollbar {{
-    width: 12px;
-    height: 12px;
-}}
-::-webkit-scrollbar-track {{
-    background: {BASALT};
-}}
-::-webkit-scrollbar-thumb {{
-    background: {ROPE};
-    border-radius: 6px;
-    border: 3px solid {BASALT};
-}}
-::-webkit-scrollbar-thumb:hover {{
-    background: {STONE};
-}}
-* {{
-    scrollbar-color: {ROPE} {BASALT};
-    scrollbar-width: thin;
-}}
-
-/* The Analytics tab's chart rows (ui/analytics_tab.py) stay rigidly
-   3-up / 2-up until Streamlit's own mobile breakpoint collapses them to a
-   single column - on tablet-ish widths that squeezes a dual-axis line
-   chart and a pie chart into a third of the screen before that. Letting
-   these two rows specifically wrap early keeps each chart legible. */
-[class*="st-key-analytics_chart_row1"] [data-testid="stHorizontalBlock"],
-[class*="st-key-analytics_chart_row2"] [data-testid="stHorizontalBlock"] {{
-    flex-wrap: wrap;
-}}
-[class*="st-key-analytics_chart_row1"] [data-testid="stColumn"],
-[class*="st-key-analytics_chart_row2"] [data-testid="stColumn"] {{
-    min-width: 300px;
-}}
-
-/* Icon-only carousel arrows (ui/session_modal.py's due-sessions
-   catch-up carousel) - Streamlit's default button padding falls a
-   little short of the 44px touch-target minimum. */
-[class*="st-key-due_carousel_prev"] button,
-[class*="st-key-due_carousel_next"] button {{
-    min-height: 44px;
 }}
 </style>
 """

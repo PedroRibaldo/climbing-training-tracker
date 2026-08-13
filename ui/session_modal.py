@@ -9,7 +9,6 @@ import streamlit as st
 
 from data_pipeline import PipelineConfig, update_session, add_session, delete_session
 from training_plan import select_exercises_for_day
-import theme
 
 
 def _category_exercise_pool(category, df_dict):
@@ -23,7 +22,7 @@ def _category_exercise_pool(category, df_dict):
 
 
 def _render_session_edit_form(
-    client, session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
+    session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
     refresh_data, is_new=False, on_saved=None,
 ):
     """Renders the actual session form (fields + save/delete buttons).
@@ -54,8 +53,6 @@ def _render_session_edit_form(
         gym_opts = [""] + list(PipelineConfig.GYM_MAPPING.keys())
         current_gym = session_data['gym_grade'] if pd.notna(session_data['gym_grade']) and session_data['gym_grade'] in gym_opts else ""
         new_gym = st.selectbox("Max gym grade", gym_opts, index=gym_opts.index(current_gym))
-        if new_gym:
-            st.html(theme.grade_swatch_html(new_gym))
 
         mb_opts = [""] + list(PipelineConfig.MOONBOARD_MAPPING.keys())
         current_mb = session_data['moonboard_grade'] if pd.notna(session_data['moonboard_grade']) and session_data['moonboard_grade'] in mb_opts else ""
@@ -141,7 +138,7 @@ def _render_session_edit_form(
                 'Exercises': ", ".join(selected_exercises)
             }
             with st.spinner("Saving…"):
-                success = add_session(client, new_session_data)
+                success = add_session(new_session_data)
             if success:
                 _finish()
     else:
@@ -157,7 +154,7 @@ def _render_session_edit_form(
                     'Exercises': ", ".join(selected_exercises)
                 }
                 with st.spinner("Saving…"):
-                    success = update_session(client, session_id, updated_data)
+                    success = update_session(session_id, updated_data)
                 if success:
                     _finish()
         with col_del:
@@ -171,7 +168,7 @@ def _render_session_edit_form(
             with col_yes:
                 if st.button("Yes, delete", icon=":material/warning:", width="stretch", key=f"danger_confirm_del_session_yes_{session_id}"):
                     with st.spinner("Deleting…"):
-                        success = delete_session(client, session_id)
+                        success = delete_session(session_id)
                     if success:
                         _finish()
             with col_no:
@@ -189,14 +186,14 @@ def _reset_delete_confirmation():
 
 @st.dialog("Session details", icon=":material/edit:", on_dismiss=_reset_delete_confirmation)
 def edit_session_modal(
-    client, session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
+    session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
     refresh_data, is_new=False,
 ):
     """Pop-up form for viewing/editing an existing session, or logging a
     new one when is_new=True
     """
     _render_session_edit_form(
-        client, session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
+        session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
         refresh_data, is_new=is_new,
     )
 
@@ -208,7 +205,7 @@ def _advance_due_carousel():
 
 
 @st.dialog("Catch up on missed sessions", icon=":material/schedule:", on_dismiss=_reset_delete_confirmation)
-def due_sessions_carousel(client, df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data):
+def due_sessions_carousel(df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data):
     """Auto-opened on page load when past sessions have no effort logged.
     Saving, deleting, or skipping the current one all advance
     to the next; running out of the queue closes the dialog.
@@ -242,7 +239,7 @@ def due_sessions_carousel(client, df_all_calendar, df_past, df_dict, exercises_b
     st.warning("This session is missing its effort - fill it in, delete it, remind yourself later, or dismiss the whole list for now.")
 
     _render_session_edit_form(
-        client, session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
+        session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
         refresh_data, is_new=False, on_saved=_advance_due_carousel,
     )
 

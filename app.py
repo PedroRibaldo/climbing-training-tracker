@@ -13,11 +13,9 @@ import pandas as pd
 
 from data_pipeline import load_clean_data, compute_kpis
 from training_plan import get_active_goal, check_and_update_goal_completion
-from user_profile import get_profile, list_injuries, current_grade_for
-from gyms import list_gyms, get_user_memberships
 import theme
 
-from ui import auth_gate, session_modal, calendar_tab, analytics_tab, library_tab, goals_tab, profile_panel
+from ui import session_modal, calendar_tab, analytics_tab, library_tab, goals_tab
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Climbing Training Tracker", page_icon=":material/terrain:", layout="wide")
@@ -59,13 +57,6 @@ st.html(f"""
 .fc-daygrid-day-frame {{
     cursor: pointer;
 }}
-/* Empty days (no logged/scheduled session) get a persistent, faint tint
-   marking them as "click to add" - the :hover brightness boost below is
-   invisible on touch devices, so without this, mobile users have no cue
-   the calendar is interactive beyond the caption above it. */
-.fc-daygrid-day:not(:has(.fc-bg-event)) .fc-daygrid-day-frame {{
-    background-color: color-mix(in srgb, {theme.ACCENT} 6%, transparent);
-}}
 @media (prefers-reduced-motion: no-preference) {{
     .fc-daygrid-day-frame {{
         transition: filter 150ms ease;
@@ -87,48 +78,21 @@ iframe[data-testid="stCustomComponentV1"] {{
 </style>
 """)
 
-# --- AUTH GATE ---
-if not auth_gate.require_login():
-    st.stop()
-
-client = st.session_state.supabase_client
-auth_gate.render_logout_control()
-
 # --- DATA LOADING ---
 @st.cache_data
-def fetch_data(_client, user_id):
+def fetch_data():
     """Cached wrapper around load_clean_data() so every rerun doesn't hit
     Supabase. Cleared explicitly after any write (see the
     modal's save/delete/add actions below)."""
-    return load_clean_data(_client)
+    return load_clean_data()
 
 with st.spinner("Loading your training data…"):
-    df_past, df_future, df_dict = fetch_data(client, st.session_state.auth_user_id)
+    df_past, df_future, df_dict = fetch_data()
 
 @st.cache_data
-def fetch_goal(_client, user_id):
+def fetch_goal():
     """Cached wrapper around get_active_goal(), mirroring fetch_data()."""
-    return get_active_goal(_client)
-
-@st.cache_data
-def fetch_profile(_client, user_id):
-    """Cached wrapper around get_profile(), mirroring fetch_goal()."""
-    return get_profile(_client, user_id)
-
-@st.cache_data
-def fetch_injuries(_client, user_id):
-    """Cached wrapper around list_injuries(), mirroring fetch_goal()."""
-    return list_injuries(_client)
-
-@st.cache_data
-def fetch_gyms(_client, user_id):
-    """Cached wrapper around list_gyms(), mirroring fetch_goal()."""
-    return list_gyms(_client)
-
-@st.cache_data
-def fetch_my_memberships(_client, user_id):
-    """Cached wrapper around get_user_memberships(), mirroring fetch_goal()."""
-    return get_user_memberships(_client)
+    return get_active_goal()
 
 def refresh_data():
     """Clear the cached session/exercise data. Callers decide when to
@@ -141,31 +105,9 @@ def refresh_all():
     fetch_data.clear()
     fetch_goal.clear()
 
-def refresh_athlete_profile():
-    """Clear the cached profile data."""
-    fetch_profile.clear()
-
-def refresh_injuries():
-    """Clear the cached injuries data."""
-    fetch_injuries.clear()
-
-def refresh_my_memberships():
-    """Clear the cached gym-membership data."""
-    fetch_my_memberships.clear()
-
-profile = fetch_profile(client, st.session_state.auth_user_id)
-injuries = fetch_injuries(client, st.session_state.auth_user_id)
-gyms_list = fetch_gyms(client, st.session_state.auth_user_id)
-memberships = fetch_my_memberships(client, st.session_state.auth_user_id)
-profile_panel.render(
-    client, st.session_state.auth_user_id, profile, injuries, gyms_list, memberships,
-    refresh_athlete_profile, refresh_injuries, refresh_my_memberships,
-)
-
-active_goal = fetch_goal(client, st.session_state.auth_user_id)
+active_goal = fetch_goal()
 if active_goal is not None:
-    current_grade = current_grade_for(profile, active_goal['target_type'])
-    if check_and_update_goal_completion(client, active_goal, current_grade, df_future):
+    if check_and_update_goal_completion(active_goal, df_past, df_future):
         refresh_all()
         st.rerun()
 
@@ -191,11 +133,7 @@ with st.container(horizontal=True):
     st.metric(":material/date_range: This week", kpis['sessions_this_week'], border=True)
     acwr_value = "–" if kpis['acwr_current'] is None else f"{kpis['acwr_current']:.2f}"
     acwr_delta = None if kpis['acwr_delta'] is None else f"{kpis['acwr_delta']:+.2f}"
-    st.metric(
-        ":material/monitoring: ACWR", acwr_value, delta=acwr_delta, delta_color="inverse", border=True,
-        help="Acute:Chronic Workload Ratio - your last 7 days of training load vs. your 28-day baseline. "
-             "0.8-1.3 is the sweet spot; above 1.5 is a spike in injury risk. See the Analytics tab for the trend.",
-    )
+    st.metric(":material/monitoring: ACWR", acwr_value, delta=acwr_delta, delta_color="inverse", border=True)
     since_last = "–" if kpis['days_since_last'] is None else f"{kpis['days_since_last']} d"
     st.metric(":material/schedule: Since last session", since_last, border=True)
 
@@ -210,7 +148,7 @@ if "due_sessions_checked" not in st.session_state:
 
 if st.session_state.due_carousel_index < len(st.session_state.get("due_sessions_queue", [])):
     session_modal.due_sessions_carousel(
-        client, df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data,
+        df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data,
     )
 
 
@@ -222,14 +160,14 @@ tab_calendar, tab_analytics, tab_library, tab_goals = st.tabs([
 
 with tab_calendar:
     calendar_tab.render(
-        client, df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data,
+        df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data,
     )
 
 with tab_analytics:
     analytics_tab.render(df_past)
 
 with tab_library:
-    library_tab.render(client, df_dict, refresh_data)
+    library_tab.render(df_dict, refresh_data)
 
 with tab_goals:
-    goals_tab.render(client, active_goal, df_past, df_future, df_dict, profile, refresh_data, refresh_all)
+    goals_tab.render(active_goal, df_past, df_future, df_dict, refresh_data, refresh_all)

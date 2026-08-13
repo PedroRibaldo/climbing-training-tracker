@@ -10,17 +10,18 @@ import pandas as pd
 import streamlit as st
 from pydantic import ValidationError
 
-from data_pipeline import PipelineConfig
+from data_pipeline import PipelineConfig, _get_supabase_client
 from .algorithm import (
-    PlanConfig, GoalRecord, preview_plan, _category_effort_overrides,
+    PlanConfig, GoalRecord, preview_plan, _current_best_grade, _category_effort_overrides,
     _generate_days_for_range, _recent_daily_loads,
 )
 
 
-def get_active_goal(client, config: Optional[PipelineConfig] = None) -> Optional[dict]:
+def get_active_goal(config: Optional[PipelineConfig] = None) -> Optional[dict]:
     """The current active goal, or None if there isn't one."""
     if config is None:
         config = PipelineConfig()
+    client = _get_supabase_client(config)
     response = client.table(PlanConfig.GOALS_TABLE).select('*').eq('status', 'active').limit(1).execute()
     if not response.data:
         return None
@@ -71,15 +72,16 @@ def _write_scheduled_sessions(
 
 
 def create_goal_and_plan(
-    client, current_grade: Optional[str], target_type: str, target_grade: str, training_weekdays: set[int],
+    target_type: str, target_grade: str, training_weekdays: set[int],
     df_past: pd.DataFrame, df_future: pd.DataFrame, df_dict: pd.DataFrame, config: Optional[PipelineConfig] = None,
 ) -> bool:
     """Creates a goal and its scheduled sessions, skipping days that
     already have one."""
     if config is None:
         config = PipelineConfig()
+    client = _get_supabase_client(config)
 
-    plan = preview_plan(current_grade, target_type, target_grade, training_weekdays, df_past, df_dict, config)
+    plan = preview_plan(target_type, target_grade, training_weekdays, df_past, df_dict, config)
     if plan.get('already_at_target'):
         st.warning(f"You've already reached {target_grade} for {target_type} - no plan needed.")
         return False
@@ -96,7 +98,7 @@ def create_goal_and_plan(
         goal_response = client.table(PlanConfig.GOALS_TABLE).insert({
             'target_type': target_type,
             'target_grade': target_grade,
-            'start_grade': current_grade,
+            'start_grade': _current_best_grade(df_past, target_type, config),
             'weekly_frequency': len(training_weekdays),
             'training_weekdays': [PlanConfig.WEEKDAY_NAMES[i] for i in sorted(training_weekdays)],
             'total_weeks': plan['total_weeks'],
@@ -118,13 +120,14 @@ def create_goal_and_plan(
 
 
 def regenerate_plan(
-    client, goal: dict, df_past: pd.DataFrame, df_future: pd.DataFrame, df_dict: pd.DataFrame,
+    goal: dict, df_past: pd.DataFrame, df_future: pd.DataFrame, df_dict: pd.DataFrame,
     config: Optional[PipelineConfig] = None,
 ) -> bool:
     """Re-rolls the remaining, unlogged portion of an active goal's plan
     using its stored phase_breakdown."""
     if config is None:
         config = PipelineConfig()
+    client = _get_supabase_client(config)
 
     created_at = pd.to_datetime(goal['created_at']).normalize()
     today = pd.to_datetime('today').normalize()
@@ -168,12 +171,13 @@ def regenerate_plan(
     return True
 
 
-def abandon_goal(client, goal_id: int, df_future: pd.DataFrame, config: Optional[PipelineConfig] = None) -> bool:
+def abandon_goal(goal_id: int, df_future: pd.DataFrame, config: Optional[PipelineConfig] = None) -> bool:
     """Marks a goal abandoned and deletes its future, not-yet-logged
     sessions. Already-logged sessions (real training history) are never
     touched."""
     if config is None:
         config = PipelineConfig()
+    client = _get_supabase_client(config)
     try:
         client.table(PlanConfig.GOALS_TABLE).update({'status': 'abandoned'}).eq('id', goal_id).execute()
         to_delete_mask = (df_future['goal_id'] == goal_id) & df_future['effort'].isna()
@@ -187,7 +191,7 @@ def abandon_goal(client, goal_id: int, df_future: pd.DataFrame, config: Optional
 
 
 def check_and_update_goal_completion(
-    client, goal: dict, current_grade: Optional[str], df_future: pd.DataFrame, config: Optional[PipelineConfig] = None,
+    goal: dict, df_past: pd.DataFrame, df_future: pd.DataFrame, config: Optional[PipelineConfig] = None,
 ) -> bool:
     """Marks the goal completed and cleans up remaining sessions if the
     target grade's been reached. Returns True if it just changed."""
@@ -195,10 +199,12 @@ def check_and_update_goal_completion(
         config = PipelineConfig()
     grade_mapping = PipelineConfig.GYM_MAPPING if goal['target_type'] == 'gym' else PipelineConfig.MOONBOARD_MAPPING
     target_ordinal = grade_mapping[goal['target_grade']]
+    current_grade = _current_best_grade(df_past, goal['target_type'], config)
     current_ordinal = grade_mapping.get(current_grade, -1)
     if current_ordinal < target_ordinal:
         return False
 
+    client = _get_supabase_client(config)
     try:
         client.table(PlanConfig.GOALS_TABLE).update({'status': 'completed'}).eq('id', goal['id']).execute()
         to_delete_mask = (df_future['goal_id'] == goal['id']) & df_future['effort'].isna()

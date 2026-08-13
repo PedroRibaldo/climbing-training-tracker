@@ -9,6 +9,7 @@ from typing import Optional
 import streamlit as st
 from supabase import Client
 
+from .client import _get_supabase_client
 from .cleaning import _clean_write_value, _to_iso_date
 from .models import PipelineConfig
 
@@ -34,10 +35,11 @@ def _sync_session_exercises(session_id: int, exercises_str: Optional[str], confi
         client.table(config.JUNCTION_TABLE).insert(junction_rows).execute()
 
 
-def update_session(client: Client, session_id: int, updated_data: dict, config: Optional[PipelineConfig] = None) -> bool:
+def update_session(session_id: int, updated_data: dict, config: Optional[PipelineConfig] = None) -> bool:
     """Update an existing session's editable fields"""
     if config is None:
         config = PipelineConfig()
+    client = _get_supabase_client(config)
 
     field_map = {
         'Category': 'category',
@@ -63,11 +65,12 @@ def update_session(client: Client, session_id: int, updated_data: dict, config: 
     return True
 
 
-def add_session(client: Client, new_data: dict, config: Optional[PipelineConfig] = None) -> bool:
+def add_session(new_data: dict, config: Optional[PipelineConfig] = None) -> bool:
     """Insert a brand-new session. "injured" defaults to False since new
     sessions are logged without that field"""
     if config is None:
         config = PipelineConfig()
+    client = _get_supabase_client(config)
 
     session_payload = {
         'date_entry': datetime.now().isoformat(),
@@ -92,10 +95,11 @@ def add_session(client: Client, new_data: dict, config: Optional[PipelineConfig]
     return True
 
 
-def delete_session(client: Client, session_id: int, config: Optional[PipelineConfig] = None) -> bool:
+def delete_session(session_id: int, config: Optional[PipelineConfig] = None) -> bool:
     """Delete a session by id. training_exercises rows cascade automatically"""
     if config is None:
         config = PipelineConfig()
+    client = _get_supabase_client(config)
     try:
         client.table(config.SESSIONS_TABLE).delete().eq('id', session_id).execute()
     except Exception as exc:

@@ -7,6 +7,7 @@ from typing import Optional
 import streamlit as st
 from supabase import Client
 
+from .client import _get_supabase_client
 from .cleaning import _clean_write_value
 from .models import PipelineConfig
 
@@ -19,10 +20,11 @@ def _sync_exercise_categories(exercise_id: int, categories: list[str], config: P
         client.table(config.EXERCISE_CATEGORIES_TABLE).insert(rows).execute()
 
 
-def add_exercise(client: Client, new_data: dict, config: Optional[PipelineConfig] = None) -> bool:
+def add_exercise(new_data: dict, config: Optional[PipelineConfig] = None) -> bool:
     """Insert a brand-new exercise"""
     if config is None:
         config = PipelineConfig()
+    client = _get_supabase_client(config)
 
     name = _clean_write_value(new_data.get('Name'))
     if not name:
@@ -54,10 +56,11 @@ def add_exercise(client: Client, new_data: dict, config: Optional[PipelineConfig
     return True
 
 
-def update_exercise(client: Client, exercise_id: int, updated_data: dict, config: Optional[PipelineConfig] = None) -> bool:
+def update_exercise(exercise_id: int, updated_data: dict, config: Optional[PipelineConfig] = None) -> bool:
     """Update specific fields of an existing exercise"""
     if config is None:
         config = PipelineConfig()
+    client = _get_supabase_client(config)
 
     field_map = {
         'Name': 'name', 'Type': 'type', 'Sets': 'sets', 'Reps': 'reps',
@@ -84,10 +87,11 @@ def update_exercise(client: Client, exercise_id: int, updated_data: dict, config
     return True
 
 
-def delete_exercise(client: Client, exercise_id: int, config: Optional[PipelineConfig] = None) -> bool:
+def delete_exercise(exercise_id: int, config: Optional[PipelineConfig] = None) -> bool:
     """Delete an exercise by id. Linked training_exercises rows cascade automatically"""
     if config is None:
         config = PipelineConfig()
+    client = _get_supabase_client(config)
     try:
         client.table(config.EXERCISES_TABLE).delete().eq('id', exercise_id).execute()
     except Exception as exc:

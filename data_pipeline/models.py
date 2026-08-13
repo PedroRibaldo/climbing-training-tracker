@@ -45,25 +45,6 @@ class PipelineConfig:
 # and membership checks (category/grade/type/phase).
 # ============================================================
 
-def _validate_membership(v, allowed, label: str):
-    """Blank/None passes through as None; anything else must be a member
-    of `allowed` (a mapping's keys or a list) or raises. Shared by every
-    category/grade/type/phase field across this module and user_profile's."""
-    if v is None or str(v).strip() == '':
-        return None
-    v = str(v).strip()
-    if v not in allowed:
-        raise ValueError(f'Unknown {label}: {v!r}')
-    return v
-
-
-def _require_nonblank_string(v, label: str) -> str:
-    """Strips and requires a non-blank string, or raises."""
-    if v is None or str(v).strip() == '':
-        raise ValueError(f'{label} is required')
-    return str(v).strip()
-
-
 class SessionRecord(BaseModel):
     """A single validated row from 'climbing_training', plus a synthesized
     'exercises' comma-separated string assembled from the training_exercises join
@@ -101,17 +82,32 @@ class SessionRecord(BaseModel):
     @field_validator('category', mode='before')
     @classmethod
     def validate_category(cls, v):
-        return _validate_membership(v, PipelineConfig.ALLOWED_CATEGORIES, 'category')
+        if v is None or str(v).strip() == '':
+            return None
+        v = str(v).strip()
+        if v not in PipelineConfig.ALLOWED_CATEGORIES:
+            raise ValueError(f'Unknown category: {v!r}')
+        return v
 
     @field_validator('gym_grade', mode='before')
     @classmethod
     def validate_gym_grade(cls, v):
-        return _validate_membership(v, PipelineConfig.GYM_MAPPING, 'gym grade')
+        if v is None or str(v).strip() == '':
+            return None
+        v = str(v).strip()
+        if v not in PipelineConfig.GYM_MAPPING:
+            raise ValueError(f'Unknown gym grade: {v!r}')
+        return v
 
     @field_validator('moonboard_grade', mode='before')
     @classmethod
     def validate_moonboard_grade(cls, v):
-        return _validate_membership(v, PipelineConfig.MOONBOARD_MAPPING, 'moonboard grade')
+        if v is None or str(v).strip() == '':
+            return None
+        v = str(v).strip()
+        if v not in PipelineConfig.MOONBOARD_MAPPING:
+            raise ValueError(f'Unknown moonboard grade: {v!r}')
+        return v
 
     @field_validator('exercises', mode='before')
     @classmethod
@@ -161,17 +157,29 @@ class ExerciseRecord(BaseModel):
     @field_validator('name', mode='before')
     @classmethod
     def name_required(cls, v):
-        return _require_nonblank_string(v, 'Exercise name')
+        if v is None or str(v).strip() == '':
+            raise ValueError('Exercise name is required')
+        return str(v).strip()
 
     @field_validator('type', mode='before')
     @classmethod
     def validate_type(cls, v):
-        return _validate_membership(v, PipelineConfig.ALLOWED_EXERCISE_TYPES, 'exercise type')
+        if v is None or str(v).strip() == '':
+            return None
+        v = str(v).strip()
+        if v not in PipelineConfig.ALLOWED_EXERCISE_TYPES:
+            raise ValueError(f'Unknown exercise type: {v!r}')
+        return v
 
     @field_validator('phase', mode='before')
     @classmethod
     def validate_phase(cls, v):
-        return _validate_membership(v, PipelineConfig.ALLOWED_PHASES, 'phase')
+        if v is None or str(v).strip() == '':
+            return None
+        v = str(v).strip()
+        if v not in PipelineConfig.ALLOWED_PHASES:
+            raise ValueError(f'Unknown phase: {v!r}')
+        return v
 
 
 def _validate_records(records: list[dict], model: type[BaseModel]) -> tuple[list[BaseModel], list[tuple[Any, str]]]:

@@ -474,7 +474,7 @@ class TestSelectExercisesForDay:
         assert result['before'] == []
 
 
-from training_plan import generate_plan, preview_plan, _recent_daily_loads
+from training_plan import generate_plan, preview_plan, _current_best_grade, _recent_daily_loads
 
 
 def make_past_df(rows):
@@ -482,6 +482,22 @@ def make_past_df(rows):
     if not df.empty:
         df['date'] = pd.to_datetime(df['date'])
     return df
+
+
+class TestCurrentBestGrade:
+
+    def test_returns_highest_ordinal_grade(self, config):
+        from data_pipeline import PipelineConfig
+        df_past = make_past_df([
+            {'date': '2026-06-01', 'gym_grade': 'Blue', 'gym_numeric': 3, 'moonboard_grade': None, 'moonboard_numeric': -1},
+            {'date': '2026-06-05', 'gym_grade': 'Red', 'gym_numeric': 4, 'moonboard_grade': None, 'moonboard_numeric': -1},
+        ])
+        assert _current_best_grade(df_past, 'gym', PipelineConfig()) == 'Red'
+
+    def test_returns_none_when_nothing_logged(self, config):
+        from data_pipeline import PipelineConfig
+        df_past = make_past_df([])
+        assert _current_best_grade(df_past, 'gym', PipelineConfig()) is None
 
 
 class TestRecentDailyLoads:
@@ -617,7 +633,7 @@ class TestPreviewPlan:
         df_dict = pd.DataFrame(columns=['name', 'phase', 'categories'])
         training_weekdays = {0, 2, 4}
         start_weekday = pd.to_datetime('today').normalize().weekday()
-        result = preview_plan(None, 'gym', 'Blue', training_weekdays, df_past, df_dict)
+        result = preview_plan('gym', 'Blue', training_weekdays, df_past, df_dict)
         expected = generate_plan(None, 'gym', 'Blue', training_weekdays, start_weekday, _recent_daily_loads(df_past), df_dict)
         assert result['total_weeks'] == expected['total_weeks']
 
@@ -627,7 +643,7 @@ class TestPreviewPlanPersonalization:
     def test_preview_plan_reports_none_pace_with_thin_history(self, config):
         df_past = make_past_df([])
         df_dict = pd.DataFrame(columns=['name', 'phase', 'categories'])
-        result = preview_plan(None, 'gym', 'Blue', {0, 2, 4}, df_past, df_dict)
+        result = preview_plan('gym', 'Blue', {0, 2, 4}, df_past, df_dict)
         assert result['weeks_per_step'] is None
 
     def test_preview_plan_reports_personalized_pace_with_enough_history(self, config):
@@ -636,7 +652,7 @@ class TestPreviewPlanPersonalization:
             {'date': '2026-05-15', 'gym_grade': 'Yellow', 'gym_numeric': 1, 'category': 'Strength', 'effort': 5},
         ])
         df_dict = pd.DataFrame(columns=['name', 'phase', 'categories'])
-        result = preview_plan('Yellow', 'gym', 'Blue', {0, 2, 4}, df_past, df_dict)
+        result = preview_plan('gym', 'Blue', {0, 2, 4}, df_past, df_dict)
         assert result['weeks_per_step'] == pytest.approx(2.0)
 
 

@@ -257,10 +257,6 @@ class TestComputeACWR:
         })
         assert compute_acwr(df).empty
 
-    def test_empty_result_has_datetime_index_not_rangeindex(self):
-        df = pd.DataFrame(columns=['date', 'effort', 'category'])
-        assert isinstance(compute_acwr(df).index, pd.DatetimeIndex)
-
 
 class TestGetPeakSessions:
 

@@ -317,6 +317,19 @@ def select_exercises_for_day(category: str, df_dict: pd.DataFrame, rotation_stat
     return result
 
 
+def _current_best_grade(df_past: pd.DataFrame, target_type: str, config: PipelineConfig) -> Optional[str]:
+    """Best (highest-ordinal) grade of the given type logged in df_past, or
+    None if nothing's been logged for that system yet."""
+    numeric_col = 'gym_numeric' if target_type == 'gym' else 'moonboard_numeric'
+    grade_col = 'gym_grade' if target_type == 'gym' else 'moonboard_grade'
+    if df_past.empty or numeric_col not in df_past.columns:
+        return None
+    valid = df_past[df_past[numeric_col] != -1]
+    if valid.empty:
+        return None
+    return valid.loc[valid[numeric_col].idxmax(), grade_col]
+
+
 def _recent_daily_loads(df_past: pd.DataFrame, window: int = 28) -> list[float]:
     """Daily training load for the last `window` days ending yesterday,
     zero-filled for days with no session."""
@@ -409,13 +422,14 @@ def generate_plan(
 
 
 def preview_plan(
-    current_grade: Optional[str], target_type: str, target_grade: str, training_weekdays: set[int],
+    target_type: str, target_grade: str, training_weekdays: set[int],
     df_past: pd.DataFrame, df_dict: pd.DataFrame, config: Optional[PipelineConfig] = None,
 ) -> dict:
     """Computes what create_goal_and_plan would generate, without
     writing anything."""
     if config is None:
         config = PipelineConfig()
+    current_grade = _current_best_grade(df_past, target_type, config)
     weeks_per_step = _historical_weeks_per_step(df_past, target_type)
     neglect_scores = _category_neglect_scores(df_past)
     effort_overrides = _category_effort_overrides(df_past)

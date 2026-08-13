@@ -11,7 +11,7 @@ import theme
 from . import session_modal
 
 
-def render(client, df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data):
+def render(df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data):
     st.caption("Click any colored session to edit it, or click a blank day to log a missed session.")
     st.html(theme.color_key_html(theme.CATEGORY_COLORS, title="Category key"))
 
@@ -29,8 +29,8 @@ def render(client, df_all_calendar, df_past, df_dict, exercises_before, exercise
     ]
 
     calendar_options = {
-        "editable": False,
-        "selectable": True,
+        "editable": "false",
+        "selectable": "true",
         "height": "auto",
         "headerToolbar": {
             "left": "prev,next today",
@@ -59,11 +59,11 @@ def render(client, df_all_calendar, df_past, df_dict, exercises_before, exercise
 
         if not existing_session.empty:
             session_modal.edit_session_modal(
-                client, existing_session.iloc[0], df_past, df_dict, exercises_before, exercises_during, exercises_after,
+                existing_session.iloc[0], df_past, df_dict, exercises_before, exercises_during, exercises_after,
                 refresh_data, is_new=False,
             )
         else:
             session_modal.edit_session_modal(
-                client, session_modal._make_blank_session(clean_clicked_date), df_past, df_dict,
+                session_modal._make_blank_session(clean_clicked_date), df_past, df_dict,
                 exercises_before, exercises_during, exercises_after, refresh_data, is_new=True,
             )
