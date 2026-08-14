@@ -1,0 +1,24 @@
+name: WHOOP sync
+
+on:
+  workflow_dispatch:
+  # NOTE: no `schedule:` trigger yet - this stays manual-only until
+  # scripts/whoop_authorize.py has been run for real against an actual
+  # WHOOP account and a manual run of this workflow has been verified to
+  # populate whoop_daily_metrics correctly.
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r scripts/requirements-whoop.txt
+      - run: python scripts/whoop_sync.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          WHOOP_CLIENT_ID: ${{ secrets.WHOOP_CLIENT_ID }}
+          WHOOP_CLIENT_SECRET: ${{ secrets.WHOOP_CLIENT_SECRET }}

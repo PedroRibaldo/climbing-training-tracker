@@ -28,6 +28,10 @@ A full-stack personal training platform for climbers: fast session logging, spor
 - Acute:Chronic Workload Ratio (ACWR) with risk-banded visualization.
 - Effort-vs-grade yield and top-session highlights.
 
+**WHOOP integration** *(optional, off by default)*
+- A sidebar toggle shows WHOOP recovery/HRV/strain/resting-heart-rate data alongside your training data once a WHOOP account is connected.
+- A daily sync script and GitHub Actions workflow keep the data current; see [Database Schema](#database-schema) for the tables involved.
+
 ---
 
 ## Tech Stack
@@ -66,6 +70,9 @@ Every row fetched from Supabase is validated with Pydantic before it reaches the
 ├── training_plan/               # Training-plan generation engine
 │   ├── algorithm.py
 │   └── store.py
+├── whoop/                       # Optional WHOOP integration (Supabase I/O + validation)
+│   ├── models.py
+│   └── store.py
 ├── ui/                          # Tab and modal rendering, one module per screen
 │   ├── session_modal.py
 │   ├── exercise_modals.py
@@ -73,10 +80,17 @@ Every row fetched from Supabase is validated with Pydantic before it reaches the
 │   ├── analytics_tab.py
 │   ├── library_tab.py
 │   └── goals_tab.py
+├── scripts/                     # One-off / scheduled utilities, not part of app.py's import graph
+│   ├── whoop_authorize.py       # One-time local WHOOP OAuth setup
+│   ├── whoop_sync.py            # Daily WHOOP data pull, run by CI
+│   └── requirements-whoop.txt
+├── .github/workflows/
+│   └── whoop_sync.yml           # Scheduled WHOOP sync (manual-trigger only until enabled)
 ├── .streamlit/config.toml       # Streamlit theme configuration
 ├── tests/
 │   ├── test_data_pipeline.py    # Validation, cleaning, and analytics tests
-│   └── test_training_plan.py    # Training-plan generation engine tests
+│   ├── test_training_plan.py    # Training-plan generation engine tests
+│   └── test_whoop.py            # WHOOP metrics validation tests
 ├── requirements.txt
 ├── requirements-dev.txt
 └── .env                         # Local Supabase credentials
@@ -142,7 +156,7 @@ The dashboard opens automatically at `http://localhost:8501`.
 
 ## Database Schema
 
-Five tables - a session can reference any number of exercises without repeating data, and a goal drives the sessions it generates.
+Eight tables - a session can reference any number of exercises without repeating data, and a goal drives the sessions it generates.
 
 ```sql
 -- One row per grade goal; only one 'active' row is expected at a time
@@ -199,6 +213,31 @@ CREATE TABLE exercise_categories (
     exercise_id BIGINT REFERENCES exercise(id) ON DELETE CASCADE,
     category TEXT NOT NULL,           -- 'Strength' | 'Stamina' | 'Technique' | 'Free'
     PRIMARY KEY (exercise_id, category)
+);
+
+-- Single row: the current WHOOP OAuth token pair
+CREATE TABLE whoop_tokens (
+    id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
+    access_token TEXT NOT NULL,
+    refresh_token TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP DEFAULT now()
+);
+
+-- One row per day of WHOOP data pulled by scripts/whoop_sync.py
+CREATE TABLE whoop_daily_metrics (
+    date DATE PRIMARY KEY,
+    recovery_score INTEGER,   -- 0-100
+    hrv_ms NUMERIC,
+    strain NUMERIC,           -- 0-21
+    resting_hr INTEGER,
+    synced_at TIMESTAMP DEFAULT now()
+);
+
+-- Single row: app-wide feature toggles (currently just WHOOP)
+CREATE TABLE app_settings (
+    id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
+    whoop_enabled BOOLEAN NOT NULL DEFAULT FALSE
 );
 ```
 

@@ -14,6 +14,7 @@ import pandas as pd
 from data_pipeline import load_clean_data, compute_kpis
 from training_plan import get_active_goal, check_and_update_goal_completion
 import theme
+import whoop
 
 from ui import session_modal, calendar_tab, analytics_tab, library_tab, goals_tab
 
@@ -105,11 +106,44 @@ def refresh_all():
     fetch_data.clear()
     fetch_goal.clear()
 
+@st.cache_data
+def fetch_whoop_enabled():
+    return whoop.is_enabled()
+
+@st.cache_data
+def fetch_whoop_metrics():
+    return whoop.get_daily_metrics()
+
+@st.cache_data
+def fetch_whoop_latest():
+    return whoop.get_latest_metrics()
+
+def refresh_whoop_enabled():
+    """Clear the cached WHOOP toggle state."""
+    fetch_whoop_enabled.clear()
+
 active_goal = fetch_goal()
 if active_goal is not None:
     if check_and_update_goal_completion(active_goal, df_past, df_future):
         refresh_all()
         st.rerun()
+
+# --- WHOOP TOGGLE (sidebar) ---
+whoop_enabled = fetch_whoop_enabled()
+with st.sidebar:
+    st.subheader(":material/monitor_heart: WHOOP")
+    new_whoop_enabled = st.toggle("Show WHOOP recovery data", value=whoop_enabled)
+    if new_whoop_enabled != whoop_enabled:
+        if whoop.set_enabled(new_whoop_enabled):
+            refresh_whoop_enabled()
+            st.rerun()
+
+if whoop_enabled:
+    df_whoop = pd.DataFrame(fetch_whoop_metrics())
+    if not df_whoop.empty:
+        df_whoop['date'] = pd.to_datetime(df_whoop['date'])
+else:
+    df_whoop = pd.DataFrame()
 
 # Single combined view of every dated session, used to drive the calendar
 df_all_calendar = pd.concat([df_past, df_future]).dropna(subset=['date']).copy()
@@ -136,6 +170,10 @@ with st.container(horizontal=True):
     st.metric(":material/monitoring: ACWR", acwr_value, delta=acwr_delta, delta_color="inverse", border=True)
     since_last = "–" if kpis['days_since_last'] is None else f"{kpis['days_since_last']} d"
     st.metric(":material/schedule: Since last session", since_last, border=True)
+    if whoop_enabled:
+        latest_whoop = fetch_whoop_latest()
+        if latest_whoop and latest_whoop.get('recovery_score') is not None:
+            st.metric(":material/monitor_heart: Recovery", f"{latest_whoop['recovery_score']}%", border=True)
 
 
 # --- CATCH UP ON DUE SESSIONS (runs once per browser session) ---
@@ -164,7 +202,7 @@ with tab_calendar:
     )
 
 with tab_analytics:
-    analytics_tab.render(df_past)
+    analytics_tab.render(df_past, whoop_enabled, df_whoop)
 
 with tab_library:
     library_tab.render(df_dict, refresh_data)
