@@ -11,6 +11,7 @@ import streamlit as st
 
 from data_pipeline import PipelineConfig, compute_acwr, get_peak_sessions
 import theme
+from . import components
 
 
 def render(df_past, whoop_enabled=False, df_whoop=None):
@@ -35,14 +36,14 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
             st.subheader(":material/local_fire_department: Training intensity")
             df_effort = df_analytics.dropna(subset=['effort']).sort_values(by='date')
 
-            if not df_effort.empty:
+            def _render_effort_chart():
                 fig = px.line(df_effort, x='date', y='effort', markers=True, template=theme.PLOTLY_TEMPLATE)
                 fig.update_traces(line_color=theme.ACCENT, marker=dict(color=theme.ACCENT, size=8))
                 fig.update_yaxes(title="Effort (1-10)", range=[0, 10.5])
                 fig.update_xaxes(title="", tickformat="%d/%m")
                 st.plotly_chart(fig)
-            else:
-                st.info("No effort data logged.")
+
+            components.chart_or_empty(not df_effort.empty, _render_effort_chart, "No effort data logged.")
 
         with col2:
             st.subheader(":material/trending_up: Grade progression")
@@ -50,7 +51,7 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
             df_gym = df_analytics[df_analytics['gym_numeric'] != -1].sort_values(by='date')
             df_moonboard = df_analytics[df_analytics['moonboard_numeric'] != -1].sort_values(by='date')
 
-            if not df_gym.empty or not df_moonboard.empty:
+            def _render_grade_chart():
                 gym_rev_map = {v: k for k, v in PipelineConfig.GYM_MAPPING.items()}
                 mb_rev_map = {v: k for k, v in PipelineConfig.MOONBOARD_MAPPING.items()}
 
@@ -81,14 +82,14 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
                 )
                 fig_grades.update_xaxes(title="", tickformat="%d/%m")
                 st.plotly_chart(fig_grades)
-            else:
-                st.info("No grade data logged.")
+
+            components.chart_or_empty(not df_gym.empty or not df_moonboard.empty, _render_grade_chart, "No grade data logged.")
 
         with col3:
             st.subheader(":material/pie_chart: Distribution")
             df_dist = df_analytics[df_analytics['category'] != 'Rest']
 
-            if not df_dist.empty:
+            def _render_distribution_chart():
                 category_counts = df_dist['category'].value_counts()
                 fig_dist = px.pie(
                     names=category_counts.index,
@@ -102,8 +103,8 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
                     marker=dict(line=dict(color=theme.BASALT, width=1.5)),
                 )
                 st.plotly_chart(fig_dist)
-            else:
-                st.info("No training sessions logged.")
+
+            components.chart_or_empty(not df_dist.empty, _render_distribution_chart, "No training sessions logged.")
 
         st.subheader(":material/query_stats: Advanced analytics")
 
@@ -116,7 +117,7 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
             acwr_df = compute_acwr(df_past)
             acwr_windowed = acwr_df[(acwr_df.index.date >= start_date) & (acwr_df.index.date <= end_date)]
 
-            if not acwr_windowed.empty and acwr_windowed['acwr'].notna().any():
+            def _render_acwr_chart():
                 band_top = max(2.0, acwr_windowed['acwr'].max(skipna=True) + 0.2)
                 band_defs = [
                     (0.8, 1.3, "sweet_spot", "Sweet spot"),
@@ -139,8 +140,12 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
                 fig_acwr.update_xaxes(title="", type='date', tickformat="%d/%m")
                 st.plotly_chart(fig_acwr)
                 st.caption("Recent (7-day) vs. baseline (28-day) training load. Needs a few weeks of consistent logging to be meaningful.")
-            else:
-                st.info("Not enough training history yet to compute ACWR.")
+
+            components.chart_or_empty(
+                not acwr_windowed.empty and acwr_windowed['acwr'].notna().any(),
+                _render_acwr_chart,
+                "Not enough training history yet to compute ACWR.",
+            )
 
         with col5:
             st.markdown("**:material/scatter_plot: Effort vs. grade yield**")
@@ -148,7 +153,7 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
             df_gym_yield = df_yield[df_yield['gym_numeric'] != -1]
             df_mb_yield = df_yield[df_yield['moonboard_numeric'] != -1]
 
-            if not df_gym_yield.empty or not df_mb_yield.empty:
+            def _render_yield_chart():
                 fig_yield = go.Figure()
                 if not df_gym_yield.empty:
                     fig_yield.add_trace(go.Scatter(
@@ -162,8 +167,8 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
                     ))
                 fig_yield.update_layout(template=theme.PLOTLY_TEMPLATE, xaxis_title="Effort (1-10)", yaxis_title="Max grade (encoded)")
                 st.plotly_chart(fig_yield)
-            else:
-                st.info("No grade data logged in this range.")
+
+            components.chart_or_empty(not df_gym_yield.empty or not df_mb_yield.empty, _render_yield_chart, "No grade data logged in this range.")
 
         st.markdown("**:material/emoji_events: Peak performance highlights**")
         top_sessions = get_peak_sessions(df_analytics, n=3)
@@ -198,38 +203,41 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
                 with col_hrv:
                     st.markdown("**HRV**")
                     df_hrv = df_whoop_range.dropna(subset=['hrv_ms'])
-                    if not df_hrv.empty:
+
+                    def _render_hrv_chart():
                         fig_hrv = px.line(df_hrv, x='date', y='hrv_ms', markers=True, template=theme.PLOTLY_TEMPLATE)
                         fig_hrv.update_traces(line_color=theme.GRADE_COLORS["Blue"], marker=dict(color=theme.GRADE_COLORS["Blue"]))
                         fig_hrv.update_yaxes(title="HRV (ms)")
                         fig_hrv.update_xaxes(title="", tickformat="%d/%m")
                         st.plotly_chart(fig_hrv)
-                    else:
-                        st.info("No HRV data in this range.")
+
+                    components.chart_or_empty(not df_hrv.empty, _render_hrv_chart, "No HRV data in this range.")
 
                 with col_strain:
                     st.markdown("**Strain**")
                     df_strain = df_whoop_range.dropna(subset=['strain'])
-                    if not df_strain.empty:
+
+                    def _render_strain_chart():
                         fig_strain = px.line(df_strain, x='date', y='strain', markers=True, template=theme.PLOTLY_TEMPLATE)
                         fig_strain.update_traces(line_color=theme.GRADE_COLORS["Red"], marker=dict(color=theme.GRADE_COLORS["Red"]))
                         fig_strain.update_yaxes(title="Strain (0-21)", range=[0, 21])
                         fig_strain.update_xaxes(title="", tickformat="%d/%m")
                         st.plotly_chart(fig_strain)
-                    else:
-                        st.info("No strain data in this range.")
+
+                    components.chart_or_empty(not df_strain.empty, _render_strain_chart, "No strain data in this range.")
 
                 with col_rhr:
                     st.markdown("**Resting HR**")
                     df_rhr = df_whoop_range.dropna(subset=['resting_hr'])
-                    if not df_rhr.empty:
+
+                    def _render_rhr_chart():
                         fig_rhr = px.line(df_rhr, x='date', y='resting_hr', markers=True, template=theme.PLOTLY_TEMPLATE)
                         fig_rhr.update_traces(line_color=theme.GRADE_COLORS["Green"], marker=dict(color=theme.GRADE_COLORS["Green"]))
                         fig_rhr.update_yaxes(title="Resting HR (bpm)")
                         fig_rhr.update_xaxes(title="", tickformat="%d/%m")
                         st.plotly_chart(fig_rhr)
-                    else:
-                        st.info("No resting HR data in this range.")
+
+                    components.chart_or_empty(not df_rhr.empty, _render_rhr_chart, "No resting HR data in this range.")
             else:
                 st.info("No WHOOP data logged in this range yet.")
     else:

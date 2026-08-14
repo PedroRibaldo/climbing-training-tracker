@@ -9,6 +9,7 @@ import streamlit as st
 from data_pipeline import PipelineConfig
 from training_plan import PlanConfig, preview_plan, create_goal_and_plan, regenerate_plan, abandon_goal
 import theme
+from . import components
 
 
 def render(active_goal, df_past, df_future, df_dict, refresh_data, refresh_all):
@@ -79,34 +80,22 @@ def render(active_goal, df_past, df_future, df_dict, refresh_data, refresh_all):
             if st.button("Abandon goal", icon=":material/delete:", width="stretch", key="danger_abandon_goal"):
                 st.session_state.confirm_abandon_goal = True
 
-        if st.session_state.get('confirm_regenerate_goal'):
-            st.warning("Re-roll the remaining weeks of this plan? Future, not-yet-logged sessions from this goal will be replaced.")
-            col_yes, col_no = st.columns(2)
-            with col_yes:
-                if st.button("Yes, regenerate", icon=":material/warning:", width="stretch", key="danger_confirm_regenerate_yes"):
-                    with st.spinner("Regenerating…"):
-                        success = regenerate_plan(active_goal, df_past, df_future, df_dict)
-                    st.session_state.pop('confirm_regenerate_goal', None)
-                    if success:
-                        refresh_data()
-                        st.rerun()
-            with col_no:
-                if st.button("Cancel", icon=":material/close:", width="stretch", key="cancel_regenerate_goal"):
-                    st.session_state.pop('confirm_regenerate_goal', None)
-                    st.rerun()
+        components.confirm_action(
+            'confirm_regenerate_goal',
+            "Re-roll the remaining weeks of this plan? Future, not-yet-logged sessions from this goal will be replaced.",
+            "Yes, regenerate",
+            on_confirm=lambda: regenerate_plan(active_goal, df_past, df_future, df_dict),
+            on_success=refresh_data,
+            spinner_text="Regenerating…",
+            key_prefix='regenerate_goal',
+        )
 
-        if st.session_state.get('confirm_abandon_goal'):
-            st.warning("Abandon this goal? Future, not-yet-logged sessions from it will be deleted. Already-logged sessions stay as real history.")
-            col_yes, col_no = st.columns(2)
-            with col_yes:
-                if st.button("Yes, abandon", icon=":material/warning:", width="stretch", key="danger_confirm_abandon_yes"):
-                    with st.spinner("Abandoning…"):
-                        success = abandon_goal(active_goal['id'], df_future)
-                    st.session_state.pop('confirm_abandon_goal', None)
-                    if success:
-                        refresh_all()
-                        st.rerun()
-            with col_no:
-                if st.button("Cancel", icon=":material/close:", width="stretch", key="cancel_abandon_goal"):
-                    st.session_state.pop('confirm_abandon_goal', None)
-                    st.rerun()
+        components.confirm_action(
+            'confirm_abandon_goal',
+            "Abandon this goal? Future, not-yet-logged sessions from it will be deleted. Already-logged sessions stay as real history.",
+            "Yes, abandon",
+            on_confirm=lambda: abandon_goal(active_goal['id'], df_future),
+            on_success=refresh_all,
+            spinner_text="Abandoning…",
+            key_prefix='abandon_goal',
+        )

@@ -9,6 +9,7 @@ import streamlit as st
 
 from data_pipeline import PipelineConfig, update_session, add_session, delete_session
 from training_plan import select_exercises_for_day
+from . import components
 
 
 def _category_exercise_pool(category, df_dict):
@@ -161,20 +162,15 @@ def _render_session_edit_form(
             if st.button("Delete session", icon=":material/delete:", width="stretch", key=f"danger_delete_session_{session_id}"):
                 st.session_state.confirm_delete_session_id = session_id
 
-        # Two-step delete confirmation, mirroring the exercise delete pattern
-        if st.session_state.get('confirm_delete_session_id') == session_id:
-            st.warning("Delete this session permanently? This also removes its logged exercises.")
-            col_yes, col_no = st.columns(2)
-            with col_yes:
-                if st.button("Yes, delete", icon=":material/warning:", width="stretch", key=f"danger_confirm_del_session_yes_{session_id}"):
-                    with st.spinner("Deleting…"):
-                        success = delete_session(session_id)
-                    if success:
-                        _finish()
-            with col_no:
-                if st.button("Cancel", icon=":material/close:", width="stretch", key=f"confirm_del_session_no_{session_id}"):
-                    st.session_state.pop('confirm_delete_session_id', None)
-                    st.rerun()
+        components.confirm_action(
+            'confirm_delete_session_id' if st.session_state.get('confirm_delete_session_id') == session_id else '__no_match__',
+            "Delete this session permanently? This also removes its logged exercises.",
+            "Yes, delete",
+            on_confirm=lambda: delete_session(session_id),
+            on_success=_finish,
+            spinner_text="Deleting…",
+            key_prefix=f'delete_session_{session_id}',
+        )
 
 
 def _reset_delete_confirmation():
