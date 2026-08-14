@@ -159,6 +159,66 @@ def notification_bell_css(count: int) -> str:
     return f"<style>{rules}</style>"
 
 
+def calendar_css() -> str:
+    """FullCalendar day-cell styling: centers the day number, tints event
+    backgrounds, adds a hover affordance. Return value is meant to be
+    passed straight to st.html().
+
+    The min-height rule works around a Streamlit quirk: the calendar is a
+    custom component that measures its own height and reports it back, but
+    tab switches never rerun the script - so a rerun triggered while this
+    tab is hidden (e.g. from the Goals tab) makes it measure a 0-height
+    element and get stuck reporting 0 until a full page reload.
+    """
+    return f"""
+<style>
+.fc-daygrid-day-frame {{
+    position: relative !important;
+}}
+.fc-daygrid-day-top {{
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
+    z-index: 10 !important;
+    margin-top: 0 !important;
+}}
+.fc-daygrid-day-number {{
+    font-family: {FONT_MONO} !important;
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    color: {CHALK} !important;
+    text-shadow: 1px 1px 3px {BASALT}, -1px -1px 3px {BASALT} !important;
+    text-decoration: none !important;
+}}
+.fc-daygrid-day-events {{
+    pointer-events: none !important;
+}}
+.fc-bg-event {{
+    opacity: 0.85 !important;
+}}
+.fc-daygrid-day-frame {{
+    cursor: pointer;
+}}
+@media (prefers-reduced-motion: no-preference) {{
+    .fc-daygrid-day-frame {{
+        transition: filter 150ms ease;
+    }}
+    .fc-daygrid-day-frame:hover {{
+        filter: brightness(1.15);
+    }}
+}}
+iframe[data-testid="stCustomComponentV1"] {{
+    min-height: 650px !important;
+}}
+</style>
+"""
+
+
 def inject_global_css() -> str:
     """Google Fonts import + base typography/spacing rules for the app.
     Return value is meant to be passed straight to st.html().

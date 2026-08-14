@@ -109,6 +109,8 @@ def clean_data(main_records: list[dict], dict_records: list[dict], config: Pipel
 
     if df_main.empty:
         df_main = pd.DataFrame(columns=list(SessionRecord.model_fields.keys()))
+    if df_dict.empty:
+        df_dict = pd.DataFrame(columns=list(ExerciseRecord.model_fields.keys()))
 
     df_main['date'] = pd.to_datetime(df_main['date'])
     if 'date_entry' in df_main.columns:
