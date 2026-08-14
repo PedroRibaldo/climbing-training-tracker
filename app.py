@@ -158,8 +158,22 @@ else:
     exercises_before, exercises_during, exercises_after = [], [], []
 
 
+# --- OVERDUE SESSIONS (drives the header notification bell) ---
+due_mask = df_past['effort'].isna() & (df_past['category'] != 'Rest')
+due_df = df_past[due_mask].sort_values(by='date', ascending=False)
+due_count = len(due_df)
+
 # --- HEADER + KPI STRIP ---
-st.title(":material/terrain: Climbing training")
+col_title, col_bell = st.columns([10, 1], vertical_alignment="center")
+with col_title:
+    st.title(":material/terrain: Climbing training")
+with col_bell:
+    st.html(theme.notification_bell_css(due_count))
+    bell_help = f"{due_count} overdue session{'s' if due_count != 1 else ''}" if due_count else "You're all caught up"
+    if st.button("", icon=":material/notifications:", key="notif_bell", help=bell_help, disabled=(due_count == 0)):
+        st.session_state.due_sessions_queue = due_df['id'].tolist()
+        st.session_state.due_carousel_index = 0
+        st.session_state.due_carousel_open = True
 
 kpis = compute_kpis(df_past)
 with st.container(horizontal=True):
@@ -176,15 +190,10 @@ with st.container(horizontal=True):
             st.metric(":material/monitor_heart: Recovery", f"{latest_whoop['recovery_score']}%", border=True)
 
 
-# --- CATCH UP ON DUE SESSIONS (runs once per browser session) ---
-if "due_sessions_checked" not in st.session_state:
-    st.session_state.due_sessions_checked = True
-    due_mask = df_past['effort'].isna() & (df_past['category'] != 'Rest')
-    due_df = df_past[due_mask].sort_values(by='date', ascending=False)
-    st.session_state.due_sessions_queue = due_df['id'].tolist()
-    st.session_state.due_carousel_index = 0
-
-if st.session_state.due_carousel_index < len(st.session_state.get("due_sessions_queue", [])):
+# --- CATCH UP ON DUE SESSIONS (opened via the header bell) ---
+if st.session_state.get("due_carousel_open", False) and (
+    st.session_state.get("due_carousel_index", 0) < len(st.session_state.get("due_sessions_queue", []))
+):
     session_modal.due_sessions_carousel(
         df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data,
     )

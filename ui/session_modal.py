@@ -28,7 +28,7 @@ def _render_session_edit_form(
     """Renders the actual session form (fields + save/delete buttons).
 
     Shared by edit_session_modal() (opened from a calendar click) and
-    due_sessions_carousel() (auto-opened on load for overdue sessions)
+    due_sessions_carousel() (opened via the header bell for overdue sessions)
 
     on_saved: called instead of the default refresh_data()+st.rerun()
     after a successful save/delete
@@ -204,10 +204,19 @@ def _advance_due_carousel():
     st.rerun()
 
 
-@st.dialog("Catch up on missed sessions", icon=":material/schedule:", on_dismiss=_reset_delete_confirmation)
+def _reset_due_carousel():
+    """Runs when the overdue-sessions dialog is dismissed via X/backdrop/Esc
+    instead of finishing the queue - closes it for good (the header bell
+    reseeds the queue fresh on its next click) and clears any pending
+    delete confirmation."""
+    st.session_state.due_carousel_open = False
+    _reset_delete_confirmation()
+
+
+@st.dialog("Catch up on missed sessions", icon=":material/schedule:", on_dismiss=_reset_due_carousel)
 def due_sessions_carousel(df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data):
-    """Auto-opened on page load when past sessions have no effort logged.
-    Saving, deleting, or skipping the current one all advance
+    """Opened by clicking the header notification bell when past sessions
+    have no effort logged. Saving or deleting the current entry advances
     to the next; running out of the queue closes the dialog.
     """
     queue = st.session_state.due_sessions_queue
@@ -236,21 +245,12 @@ def due_sessions_carousel(df_all_calendar, df_past, df_dict, exercises_before, e
             st.session_state.due_carousel_index += 1
             st.rerun()
 
-    st.warning("This session is missing its effort - fill it in, delete it, remind yourself later, or dismiss the whole list for now.")
+    st.warning("This session is missing its effort - fill it in or delete it.")
 
     _render_session_edit_form(
         session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
         refresh_data, is_new=False, on_saved=_advance_due_carousel,
     )
-
-    col_skip, col_dismiss = st.columns(2)
-    with col_skip:
-        if st.button("Remind me later", icon=":material/skip_next:", width="stretch", key="due_carousel_skip"):
-            _advance_due_carousel()
-    with col_dismiss:
-        if st.button("Dismiss all", icon=":material/close:", width="stretch", key="due_carousel_dismiss_all"):
-            st.session_state.due_carousel_index = len(queue)
-            st.rerun()
 
 
 def _make_blank_session(clicked_date_str: str) -> pd.Series:

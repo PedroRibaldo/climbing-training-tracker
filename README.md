@@ -15,7 +15,7 @@ A full-stack personal training platform for climbers: fast session logging, spor
 **Logging**
 - Click-to-edit calendar - click any day to log or amend a session.
 - Before / During / After exercise phasing, pulled from an Exercise Library.
-- Smart defaults pre-fill warm-up/cool-down from your last session; a catch-up carousel surfaces anything left unlogged.
+- Smart defaults pre-fill warm-up/cool-down from your last session; a header notification bell badges how many past sessions are missing logged effort and opens a catch-up carousel to fill them in.
 
 **Training Plans**
 - Set a target grade and the weekdays you actually train on; get a phased (Base → Build → Peak) plan with a category and exercises for every scheduled day.

@@ -115,6 +115,50 @@ def phase_timeline_html(phase_breakdown: list, total_weeks: int, elapsed_weeks: 
 """
 
 
+def notification_bell_css(count: int) -> str:
+    """Styles the header notification bell (Streamlit button key='notif_bell')
+    as an icon with a small floating badge showing `count` overdue sessions -
+    or dims it with no badge when there's nothing overdue. Returned HTML is
+    meant to be passed straight to st.html()."""
+    if count > 0:
+        rules = f"""
+        [class*="st-key-notif_bell"] button {{
+            color: {ACCENT} !important;
+            border-color: {ACCENT} !important;
+            position: relative;
+            overflow: visible !important;
+        }}
+        [class*="st-key-notif_bell"] button::after {{
+            content: "{count}";
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            background: {DANGER};
+            color: {BASALT};
+            font-family: {FONT_MONO};
+            font-size: 0.65rem;
+            font-weight: 700;
+            min-width: 16px;
+            height: 16px;
+            padding: 0 3px;
+            border-radius: 999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }}
+        """
+    else:
+        rules = f"""
+        [class*="st-key-notif_bell"] button {{
+            color: {STONE} !important;
+            border-color: {ROPE} !important;
+            opacity: 0.6;
+        }}
+        """
+    return f"<style>{rules}</style>"
+
+
 def inject_global_css() -> str:
     """Google Fonts import + base typography/spacing rules for the app.
     Return value is meant to be passed straight to st.html().
