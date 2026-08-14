@@ -56,8 +56,18 @@ def refresh_whoop_enabled():
 active_goal = fetch_goal()
 if active_goal is not None:
     if check_and_update_goal_completion(active_goal, df_past, df_future):
+        st.session_state.goal_just_completed = {
+            'target_grade': active_goal['target_grade'],
+            'target_type': active_goal['target_type'],
+        }
         refresh_all()
         st.rerun()
+
+completed = st.session_state.pop('goal_just_completed', None)
+if completed:
+    grade_label = "V-scale" if completed['target_type'] == 'moonboard' else "gym"
+    st.toast(f"Goal reached: {completed['target_grade']} ({grade_label})!", icon=":material/celebration:")
+    st.balloons()
 
 # --- WHOOP TOGGLE (sidebar) ---
 whoop_enabled = fetch_whoop_enabled()
