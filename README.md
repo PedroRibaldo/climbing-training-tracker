@@ -26,7 +26,7 @@ A full-stack personal training platform for climbers: fast session logging, spor
 - Color-coded training calendar and a live KPI strip (streak, weekly volume, ACWR, days since last session).
 - Effort trend and gym/Moonboard grade progression over a custom date range.
 - Acute:Chronic Workload Ratio (ACWR) with risk-banded visualization.
-- Effort-vs-grade yield and top-session highlights.
+- Effort-vs-grade yield.
 
 **WHOOP integration** *(optional, off by default)*
 - A sidebar toggle shows WHOOP recovery/HRV/strain/resting-heart-rate data alongside your training data once a WHOOP account is connected.
@@ -250,7 +250,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-Covers Pydantic validation (valid and deliberately invalid rows), the past/future session split, the analytics functions (`compute_acwr`, `get_peak_sessions`), and the training-plan engine all against hand-built edge cases.
+Covers Pydantic validation (valid and deliberately invalid rows), the past/future session split, the analytics functions (`compute_acwr`), and the training-plan engine all against hand-built edge cases.
 
 ---
 

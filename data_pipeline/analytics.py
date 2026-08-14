@@ -102,22 +102,3 @@ def compute_kpis(df_past: pd.DataFrame) -> dict:
         'acwr_delta': acwr_delta,
         'days_since_last': int((today - last_date).days),
     }
-
-
-def get_peak_sessions(df: pd.DataFrame, n: int = 3) -> pd.DataFrame:
-    """Rank sessions by a "how strong was this session" composite score and
-    return the top n, with effort as a tiebreaker. Rest days are excluded.
-    """
-    if df.empty:
-        return df.assign(score=pd.Series(dtype=float))
-
-    ranked = df[df['category'] != 'Rest'].copy()
-    if ranked.empty:
-        return ranked.assign(score=pd.Series(dtype=float))
-
-    ranked['score'] = (
-        ranked['gym_numeric'].clip(lower=0)
-        + ranked['moonboard_numeric'].clip(lower=0)
-        + ranked['effort'].fillna(0) / 10
-    )
-    return ranked.sort_values('score', ascending=False).head(n)

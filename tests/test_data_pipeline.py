@@ -2,15 +2,15 @@
 Tests for the row validation/cleaning logic and analytics functions in
 data_pipeline.py.
 
-These exercise clean_data(), compute_acwr(), and get_peak_sessions()
-directly with hand-built rows shaped like Supabase's REST API responses
+These exercise clean_data() and compute_acwr() directly with hand-built
+rows shaped like Supabase's REST API responses
 
 Run with: pytest
 """
 import pandas as pd
 import pytest
 
-from data_pipeline import clean_data, compute_acwr, get_peak_sessions, PipelineConfig
+from data_pipeline import clean_data, compute_acwr, PipelineConfig
 
 
 @pytest.fixture
@@ -256,33 +256,3 @@ class TestComputeACWR:
             'category': ['Rest'],
         })
         assert compute_acwr(df).empty
-
-
-class TestGetPeakSessions:
-
-    @pytest.fixture
-    def sample_sessions(self):
-        return pd.DataFrame({
-            'date': pd.to_datetime(['2026-07-01', '2026-07-02', '2026-07-03', '2026-07-04', '2026-07-05']),
-            'category': ['Strength', 'Rest', 'Technique', 'Free', 'Strength'],
-            'effort': [8, None, 6, 9, 5],
-            'gym_numeric': [3, -1, 5, -1, 2],
-            'moonboard_numeric': [-1, -1, -1, 8, -1],
-        })
-
-    def test_rest_days_are_excluded(self, sample_sessions):
-        top = get_peak_sessions(sample_sessions, n=3)
-        assert 'Rest' not in top['category'].values
-
-    def test_highest_grade_session_ranks_first(self, sample_sessions):
-        top = get_peak_sessions(sample_sessions, n=3)
-        assert top.iloc[0]['date'] == pd.Timestamp('2026-07-04')
-
-    def test_returns_requested_count(self, sample_sessions):
-        assert len(get_peak_sessions(sample_sessions, n=3)) == 3
-
-    def test_fewer_sessions_than_n_returns_available(self, sample_sessions):
-        assert len(get_peak_sessions(sample_sessions.iloc[:1], n=3)) == 1
-
-    def test_empty_dataframe_returns_empty_result(self, sample_sessions):
-        assert get_peak_sessions(sample_sessions.iloc[0:0], n=3).empty

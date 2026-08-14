@@ -1,6 +1,6 @@
 """
 The Analytics tab: effort trend, grade progression, category mix, ACWR,
-effort-vs-grade yield, and peak session highlights over a selected range.
+and effort-vs-grade yield over a selected range.
 """
 
 import pandas as pd
@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
 
-from data_pipeline import PipelineConfig, compute_acwr, get_peak_sessions
+from data_pipeline import PipelineConfig, compute_acwr
 import theme
 from . import components
 
@@ -175,27 +175,6 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
             st.plotly_chart(fig_yield)
 
         components.chart_or_empty(not df_gym_yield.empty or not df_mb_yield.empty, _render_yield_chart, "No grade data logged in this range.")
-
-    st.markdown("**:material/emoji_events: Peak performance highlights**")
-    top_sessions = get_peak_sessions(df_analytics, n=3)
-
-    if not top_sessions.empty:
-        gym_rev_map = {v: k for k, v in PipelineConfig.GYM_MAPPING.items()}
-        mb_rev_map = {v: k for k, v in PipelineConfig.MOONBOARD_MAPPING.items()}
-        highlight_cols = st.columns(len(top_sessions))
-
-        for col, (_, session) in zip(highlight_cols, top_sessions.iterrows()):
-            with col:
-                st.markdown(f"**{session['date'].strftime('%d/%m/%Y')}**")
-                st.caption(session['category'])
-                if session['gym_numeric'] != -1:
-                    st.markdown(f":material/terrain: Gym: {gym_rev_map.get(int(session['gym_numeric']), '-')}")
-                if session['moonboard_numeric'] != -1:
-                    st.markdown(f":material/grid_view: Moonboard: {mb_rev_map.get(int(session['moonboard_numeric']), '-')}")
-                if pd.notna(session['effort']):
-                    st.markdown(f":material/local_fire_department: Effort: {int(session['effort'])}/10")
-    else:
-        st.info("No sessions to highlight in this range yet.")
 
     if whoop_enabled and df_whoop is not None and not df_whoop.empty:
         whoop_mask = (df_whoop['date'].dt.date >= start_date) & (df_whoop['date'].dt.date <= end_date)
