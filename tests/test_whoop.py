@@ -54,6 +54,18 @@ class TestWhoopMetricsValidation:
         with pytest.raises(ValidationError):
             WhoopMetricsRecord.model_validate(make_whoop_row(strain=25.0))
 
+    def test_strain_below_zero_is_rejected(self):
+        with pytest.raises(ValidationError):
+            WhoopMetricsRecord.model_validate(make_whoop_row(strain=-1.0))
+
+    def test_hrv_below_zero_is_rejected(self):
+        with pytest.raises(ValidationError):
+            WhoopMetricsRecord.model_validate(make_whoop_row(hrv_ms=-1.0))
+
+    def test_resting_hr_below_zero_is_rejected(self):
+        with pytest.raises(ValidationError):
+            WhoopMetricsRecord.model_validate(make_whoop_row(resting_hr=-1))
+
     def test_missing_date_is_rejected(self):
         row = make_whoop_row()
         del row['date']
