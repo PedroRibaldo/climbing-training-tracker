@@ -34,11 +34,7 @@ def render(active_goal, df_past, df_future, df_dict, refresh_data, refresh_all):
             if preview.get('already_at_target'):
                 st.success(f"You've already reached {target_grade} - no plan needed.")
             else:
-                weeks_per_step = preview.get('weeks_per_step')
-                if weeks_per_step is not None:
-                    st.caption(f"Pace: {weeks_per_step:.1f} weeks/grade step, from your own history")
-                else:
-                    st.caption("Pace: using the default model (gets longer for higher grades)")
+                st.caption("Pace: using the default model (gets longer for higher grades)")
 
                 neglect_scores = preview.get('neglect_scores') or {}
                 most_neglected = max(neglect_scores, key=neglect_scores.get, default=None)

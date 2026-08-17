@@ -77,23 +77,17 @@ class GoalRecord(BaseModel):
         return list(v)
 
 
-def compute_plan_length(
-    current_ordinal: int, target_ordinal: int, config: PlanConfig,
-    weeks_per_step: Optional[float] = None,
-) -> int:
-    """Total plan length in weeks (0 if already at/above target). Uses a
-    graduated per-level cost by default, or a flat weeks_per_step from
-    history when given; no upper clamp."""
+def compute_plan_length(current_ordinal: int, target_ordinal: int, config: PlanConfig) -> int:
+    """Total plan length in weeks (0 if already at/above target). Each
+    grade step costs more than the last (a graduated per-level cost); no
+    upper clamp."""
     distance = target_ordinal - current_ordinal
     if distance <= 0:
         return 0
-    if weeks_per_step is not None:
-        weeks = distance * weeks_per_step
-    else:
-        weeks = sum(
-            config.DEFAULT_STEP_BASE_WEEKS + config.DEFAULT_STEP_INCREMENT_WEEKS * (k - 1)
-            for k in range(current_ordinal + 1, target_ordinal + 1)
-        )
+    weeks = sum(
+        config.DEFAULT_STEP_BASE_WEEKS + config.DEFAULT_STEP_INCREMENT_WEEKS * (k - 1)
+        for k in range(current_ordinal + 1, target_ordinal + 1)
+    )
     return max(config.MIN_PLAN_WEEKS, round(weeks))
 
 
@@ -242,24 +236,6 @@ def _category_neglect_scores(df_past: pd.DataFrame) -> dict[str, float]:
     return scores
 
 
-def _historical_weeks_per_step(df_past: pd.DataFrame, target_type: str) -> Optional[float]:
-    """Average real weeks/grade-level from gaps between first-achieved
-    dates; None if fewer than 2 levels are logged."""
-    numeric_col = 'gym_numeric' if target_type == 'gym' else 'moonboard_numeric'
-    if df_past.empty or numeric_col not in df_past.columns:
-        return None
-    valid = df_past[df_past[numeric_col] != -1]
-    if valid.empty:
-        return None
-
-    first_achieved = valid.groupby(numeric_col)['date'].min().sort_index()
-    if len(first_achieved) < 2:
-        return None
-
-    gaps_in_weeks = first_achieved.diff().dropna().dt.days / 7
-    return gaps_in_weeks.mean()
-
-
 def _category_effort_overrides(df_past: pd.DataFrame) -> dict[str, float]:
     """Average logged effort per category; categories never logged are
     simply absent."""
@@ -389,13 +365,12 @@ def generate_plan(
     current_grade: Optional[str], target_type: str, target_grade: str,
     training_weekdays: set[int], start_weekday: int,
     recent_daily_loads: list[float], df_dict: pd.DataFrame, config: Optional[PlanConfig] = None,
-    weeks_per_step: Optional[float] = None,
     neglect_scores: Optional[dict[str, float]] = None,
     effort_overrides: Optional[dict[str, float]] = None,
 ) -> dict:
     """Pure plan generator. start_weekday anchors training_weekdays to
-    real slots; weeks_per_step/neglect_scores/effort_overrides are the
-    optional personalization inputs, all no-ops by default."""
+    real slots; neglect_scores/effort_overrides are the optional
+    personalization inputs, both no-ops by default."""
     if config is None:
         config = PlanConfig()
 
@@ -403,7 +378,7 @@ def generate_plan(
     current_ordinal = grade_mapping.get(current_grade, -1)
     target_ordinal = grade_mapping[target_grade]
 
-    total_weeks = compute_plan_length(current_ordinal, target_ordinal, config, weeks_per_step)
+    total_weeks = compute_plan_length(current_ordinal, target_ordinal, config)
     if total_weeks == 0:
         return {'already_at_target': True}
 
@@ -416,7 +391,6 @@ def generate_plan(
         'total_weeks': total_weeks,
         'phase_breakdown': phase_breakdown,
         'days': days,
-        'weeks_per_step': weeks_per_step,
         'neglect_scores': neglect_scores or {},
     }
 
@@ -430,14 +404,13 @@ def preview_plan(
     if config is None:
         config = PipelineConfig()
     current_grade = _current_best_grade(df_past, target_type, config)
-    weeks_per_step = _historical_weeks_per_step(df_past, target_type)
     neglect_scores = _category_neglect_scores(df_past)
     effort_overrides = _category_effort_overrides(df_past)
     start_weekday = pd.to_datetime('today').normalize().weekday()
     return generate_plan(
         current_grade, target_type, target_grade, training_weekdays, start_weekday,
         _recent_daily_loads(df_past), df_dict,
-        weeks_per_step=weeks_per_step, neglect_scores=neglect_scores, effort_overrides=effort_overrides,
+        neglect_scores=neglect_scores, effort_overrides=effort_overrides,
     )
 
 

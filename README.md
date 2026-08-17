@@ -19,7 +19,7 @@ A full-stack personal training platform for climbers: fast session logging, spor
 
 **Training Plans**
 - Set a target grade and the weekdays you actually train on; get a phased (Base → Build → Peak) plan with a category and exercises for every scheduled day.
-- Pace, category emphasis, and effort assumptions are personalized from your own logged history rather than fixed defaults, with a fallback when history is thin.
+- Category emphasis and effort assumptions are personalized from your own logged history rather than fixed defaults, with a fallback when history is thin. Plan length follows a fixed graduated pace: 6 weeks for the first grade step, plus 2 more weeks for each step further out.
 - Every generated day is checked against a forward-simulated Acute:Chronic Workload Ratio and automatically downgraded if it would spike injury risk.
 
 **Analytics**

@@ -48,15 +48,6 @@ class TestComputePlanLength:
         assert compute_plan_length(current_ordinal=-1, target_ordinal=0, config=config) == config.MIN_PLAN_WEEKS
         assert config.MIN_PLAN_WEEKS == 6
 
-    def test_personalized_weeks_per_step_overrides_default_model(self, config):
-        # 2 steps * 4.5 weeks/step (from history) = 9, used flat instead of
-        # the graduated default (which would give a different number).
-        assert compute_plan_length(current_ordinal=0, target_ordinal=2, config=config, weeks_per_step=4.5) == 9
-
-    def test_personalized_weeks_per_step_still_floors_to_min_plan_weeks(self, config):
-        # 1 step * 2 weeks/step = 2, floored up to MIN_PLAN_WEEKS (6)
-        assert compute_plan_length(current_ordinal=0, target_ordinal=1, config=config, weeks_per_step=2.0) == 6
-
 
 class TestBuildPhaseBreakdown:
 
@@ -300,37 +291,6 @@ class TestCategoryNeglectScores:
         assert 'Free' not in with_free
 
 
-from training_plan import _historical_weeks_per_step
-
-
-class TestHistoricalWeeksPerStep:
-
-    def test_no_history_returns_none(self, config):
-        assert _historical_weeks_per_step(make_past_df_for_neglect([]), 'gym') is None
-
-    def test_fewer_than_two_levels_returns_none(self, config):
-        df_past = make_past_df_for_neglect([
-            {'date': '2026-06-01', 'gym_grade': 'Blue', 'gym_numeric': 3},
-        ])
-        assert _historical_weeks_per_step(df_past, 'gym') is None
-
-    def test_averages_gaps_between_first_achieved_levels(self, config):
-        df_past = make_past_df_for_neglect([
-            {'date': '2026-05-01', 'gym_grade': 'White', 'gym_numeric': 0},
-            {'date': '2026-05-15', 'gym_grade': 'Yellow', 'gym_numeric': 1},  # +2 weeks
-            {'date': '2026-06-12', 'gym_grade': 'Green', 'gym_numeric': 2},   # +4 weeks
-        ])
-        assert _historical_weeks_per_step(df_past, 'gym') == pytest.approx(3.0)
-
-    def test_ignores_repeat_logs_of_an_already_achieved_level(self, config):
-        df_past = make_past_df_for_neglect([
-            {'date': '2026-05-01', 'gym_grade': 'White', 'gym_numeric': 0},
-            {'date': '2026-05-08', 'gym_grade': 'White', 'gym_numeric': 0},
-            {'date': '2026-05-15', 'gym_grade': 'Yellow', 'gym_numeric': 1},
-        ])
-        assert _historical_weeks_per_step(df_past, 'gym') == pytest.approx(2.0)
-
-
 from training_plan import _category_effort_overrides
 
 
@@ -521,6 +481,14 @@ class TestGeneratePlan:
         result = generate_plan('Red', 'gym', 'Blue', {0, 2, 4, 6}, 0, [0.0] * 28, pd.DataFrame(columns=['name', 'phase', 'categories']))
         assert result == {'already_at_target': True}
 
+    def test_multi_step_gap_matches_graduated_math(self, config):
+        result = generate_plan(
+            'Red', 'gym', 'Black', {0, 2, 4}, 0, [0.0] * 28,
+            pd.DataFrame(columns=['name', 'phase', 'categories']),
+        )
+        # Red (ordinal 4) -> Black (ordinal 6): step 5 (14) + step 6 (16) = 30.
+        assert result['total_weeks'] == 30
+
     def test_generates_total_weeks_times_seven_days(self, config):
         result = generate_plan(None, 'gym', 'Blue', {0, 2, 4, 6}, 0, [0.0] * 28, pd.DataFrame(columns=['name', 'phase', 'categories']))
         assert len(result['days']) == result['total_weeks'] * 7
@@ -568,26 +536,6 @@ class TestGeneratePlan:
 
 
 class TestGeneratePlanPersonalization:
-
-    def test_weeks_per_step_overrides_default_pace(self, config):
-        # Blue -> Red is ordinal 3 -> 4 (default model would give 12 weeks);
-        # with a personalized weeks_per_step of 4.5, distance(1)*4.5 = 4.5,
-        # floored to MIN_PLAN_WEEKS (6).
-        result = generate_plan(
-            'Blue', 'gym', 'Red', {0, 1, 2, 3}, 0, [0.0] * 28,
-            pd.DataFrame(columns=['name', 'phase', 'categories']),
-            weeks_per_step=4.5,
-        )
-        assert result['total_weeks'] == 6
-        assert result['weeks_per_step'] == 4.5
-
-    def test_no_weeks_per_step_uses_default_pace_and_reports_none(self, config):
-        result = generate_plan(
-            'Blue', 'gym', 'Red', {0, 1, 2, 3}, 0, [0.0] * 28,
-            pd.DataFrame(columns=['name', 'phase', 'categories']),
-        )
-        assert result['total_weeks'] == 12
-        assert result['weeks_per_step'] is None
 
     def test_neglect_scores_are_threaded_into_phase_breakdown(self, config):
         scores = {'Strength': 0.0, 'Stamina': 0.0, 'Technique': 1.0, 'Free': 0.0}
@@ -637,23 +585,20 @@ class TestPreviewPlan:
         expected = generate_plan(None, 'gym', 'Blue', training_weekdays, start_weekday, _recent_daily_loads(df_past), df_dict)
         assert result['total_weeks'] == expected['total_weeks']
 
-
-class TestPreviewPlanPersonalization:
-
-    def test_preview_plan_reports_none_pace_with_thin_history(self, config):
-        df_past = make_past_df([])
-        df_dict = pd.DataFrame(columns=['name', 'phase', 'categories'])
-        result = preview_plan('gym', 'Blue', {0, 2, 4}, df_past, df_dict)
-        assert result['weeks_per_step'] is None
-
-    def test_preview_plan_reports_personalized_pace_with_enough_history(self, config):
+    def test_ignores_non_monotonic_grade_history(self, config):
         df_past = make_past_df([
-            {'date': '2026-05-01', 'gym_grade': 'White', 'gym_numeric': 0, 'category': 'Strength', 'effort': 5},
-            {'date': '2026-05-15', 'gym_grade': 'Yellow', 'gym_numeric': 1, 'category': 'Strength', 'effort': 5},
+            {'date': '2026-05-01', 'gym_grade': 'Red', 'gym_numeric': 4, 'category': 'Strength', 'effort': 7},
+            {'date': '2026-05-22', 'gym_grade': 'Blue', 'gym_numeric': 3, 'category': 'Strength', 'effort': 7},
         ])
         df_dict = pd.DataFrame(columns=['name', 'phase', 'categories'])
-        result = preview_plan('gym', 'Blue', {0, 2, 4}, df_past, df_dict)
-        assert result['weeks_per_step'] == pytest.approx(2.0)
+        result = preview_plan('gym', 'Black', {0, 2, 4}, df_past, df_dict)
+        # Current best grade is Red (ordinal 4, the highest logged) -> Black
+        # (ordinal 6): step 5 (Red->Purple, 14) + step 6 (Purple->Black, 16)
+        # = 30 weeks. Blue was logged chronologically *after* Red here (a
+        # realistic, non-monotonic log order) - before this fix, that
+        # produced a negative personalized pace that collapsed the whole
+        # plan to a flat 6 weeks regardless of distance.
+        assert result['total_weeks'] == 30
 
 
 from datetime import datetime
