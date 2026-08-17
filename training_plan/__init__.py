@@ -16,6 +16,7 @@ was a single module.
 from .algorithm import (
     PlanConfig, GoalRecord, compute_plan_length, build_phase_breakdown, schedule_week,
     apply_acwr_guardrail, select_exercises_for_day, generate_plan, preview_plan,
+    compute_adherence,
     _adjust_weights_for_neglect, _training_day_slots, _swrr_pick, _simulated_acwr,
     _downgrade_if_needed, _category_neglect_scores, _historical_weeks_per_step,
     _category_effort_overrides, _rotate_pick, _bool_col, _current_best_grade,

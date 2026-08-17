@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from training_plan import (
-    PlanConfig, compute_plan_length, build_phase_breakdown,
+    PlanConfig, compute_plan_length, build_phase_breakdown, compute_adherence,
 )
 
 
@@ -706,3 +706,42 @@ class TestExistingSessionDates:
         ])
         result = _existing_session_dates(df_future)
         assert result == {pd.Timestamp('2026-08-01'), pd.Timestamp('2026-08-03')}
+
+
+class TestComputeAdherence:
+
+    def test_counts_only_this_goals_sessions(self):
+        df_past = pd.DataFrame({
+            'goal_id': [1, 1, 2],
+            'category': ['Strength', 'Technique', 'Strength'],
+            'effort': [7, None, 8],
+        })
+        assert compute_adherence(df_past, goal_id=1) == {'scheduled': 2, 'logged': 1}
+
+    def test_rest_days_excluded(self):
+        df_past = pd.DataFrame({
+            'goal_id': [1, 1, 1],
+            'category': ['Strength', 'Rest', 'Rest'],
+            'effort': [7, None, None],
+        })
+        assert compute_adherence(df_past, goal_id=1) == {'scheduled': 1, 'logged': 1}
+
+    def test_all_sessions_logged(self):
+        df_past = pd.DataFrame({
+            'goal_id': [1, 1],
+            'category': ['Strength', 'Stamina'],
+            'effort': [7, 6],
+        })
+        assert compute_adherence(df_past, goal_id=1) == {'scheduled': 2, 'logged': 2}
+
+    def test_no_sessions_for_goal_returns_zero(self):
+        df_past = pd.DataFrame({
+            'goal_id': [2, 2],
+            'category': ['Strength', 'Stamina'],
+            'effort': [7, 6],
+        })
+        assert compute_adherence(df_past, goal_id=1) == {'scheduled': 0, 'logged': 0}
+
+    def test_empty_df_past_returns_zero(self):
+        df_past = pd.DataFrame({'goal_id': [], 'category': [], 'effort': []})
+        assert compute_adherence(df_past, goal_id=1) == {'scheduled': 0, 'logged': 0}

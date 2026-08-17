@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from data_pipeline import PipelineConfig
-from training_plan import PlanConfig, preview_plan, create_goal_and_plan, regenerate_plan, abandon_goal
+from training_plan import PlanConfig, preview_plan, create_goal_and_plan, regenerate_plan, abandon_goal, compute_adherence
 import theme
 from . import components
 
@@ -71,6 +71,13 @@ def render(active_goal, df_past, df_future, df_dict, refresh_data, refresh_all):
         st.markdown(f"**Goal:** {active_goal['target_grade']} ({active_goal['target_type']})")
         st.write(f"Week {current_week} of {active_goal['total_weeks']} - {current_phase} phase")
         st.html(theme.phase_timeline_html(active_goal['phase_breakdown'], active_goal['total_weeks'], elapsed_weeks))
+
+        adherence = compute_adherence(df_past, active_goal['id'])
+        if adherence['scheduled'] > 0:
+            st.progress(
+                adherence['logged'] / adherence['scheduled'],
+                text=f"{adherence['logged']} of {adherence['scheduled']} training sessions logged so far",
+            )
 
         col_regen, col_abandon = st.columns(2)
         with col_regen:

@@ -19,7 +19,7 @@ from .cleaning import (
 )
 from .sessions import _sync_session_exercises, update_session, add_session, delete_session
 from .exercises import _sync_exercise_categories, add_exercise, update_exercise, delete_exercise
-from .analytics import compute_acwr, compute_kpis
+from .analytics import compute_acwr, compute_kpis, compute_grade_pyramid
 
 if __name__ == "__main__":
     # Quick manual smoke test: python -m data_pipeline

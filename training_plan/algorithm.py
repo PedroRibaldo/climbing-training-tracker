@@ -439,3 +439,17 @@ def preview_plan(
         _recent_daily_loads(df_past), df_dict,
         weeks_per_step=weeks_per_step, neglect_scores=neglect_scores, effort_overrides=effort_overrides,
     )
+
+
+def compute_adherence(df_past: pd.DataFrame, goal_id: int) -> dict:
+    """Training-day sessions for this goal that should have already
+    happened (already in df_past), split into scheduled vs. actually
+    logged. Rest days are excluded - they carry no effort and can't be
+    "missed"."""
+    if df_past.empty:
+        return {'scheduled': 0, 'logged': 0}
+    goal_sessions = df_past[(df_past['goal_id'] == goal_id) & (df_past['category'] != 'Rest')]
+    return {
+        'scheduled': len(goal_sessions),
+        'logged': int(goal_sessions['effort'].notna().sum()),
+    }

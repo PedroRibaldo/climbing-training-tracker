@@ -10,7 +10,7 @@ Run with: pytest
 import pandas as pd
 import pytest
 
-from data_pipeline import clean_data, compute_acwr, PipelineConfig
+from data_pipeline import clean_data, compute_acwr, compute_grade_pyramid, PipelineConfig
 
 
 @pytest.fixture
@@ -256,3 +256,28 @@ class TestComputeACWR:
             'category': ['Rest'],
         })
         assert compute_acwr(df).empty
+
+
+class TestComputeGradePyramid:
+
+    def test_counts_sessions_per_grade_in_easiest_to_hardest_order(self):
+        df = pd.DataFrame({'gym_grade': ['Blue', 'Blue', 'White', 'Red']})
+        counts = compute_grade_pyramid(df, 'gym_grade', PipelineConfig.GYM_MAPPING)
+        assert list(counts.index) == ['White', 'Blue', 'Red']
+        assert list(counts.values) == [1, 2, 1]
+
+    def test_grades_with_zero_sessions_are_dropped(self):
+        df = pd.DataFrame({'gym_grade': ['White', 'White']})
+        counts = compute_grade_pyramid(df, 'gym_grade', PipelineConfig.GYM_MAPPING)
+        assert list(counts.index) == ['White']
+
+    def test_order_is_not_sorted_by_frequency(self):
+        # value_counts() alone would sort Black (3x) before White (1x) -
+        # this must stay in grade order regardless of which is more common
+        df = pd.DataFrame({'gym_grade': ['Black', 'Black', 'Black', 'White']})
+        counts = compute_grade_pyramid(df, 'gym_grade', PipelineConfig.GYM_MAPPING)
+        assert list(counts.index) == ['White', 'Black']
+
+    def test_empty_dataframe_returns_empty_series(self):
+        df = pd.DataFrame(columns=['gym_grade'])
+        assert compute_grade_pyramid(df, 'gym_grade', PipelineConfig.GYM_MAPPING).empty

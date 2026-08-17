@@ -26,7 +26,7 @@ A full-stack personal training platform for climbers: fast session logging, spor
 - Color-coded training calendar and a live KPI strip (streak, weekly volume, ACWR, days since last session).
 - Effort trend and gym/Moonboard grade progression over a custom date range.
 - Acute:Chronic Workload Ratio (ACWR) with risk-banded visualization.
-- Effort-vs-grade yield.
+- Grade pyramid: session volume by grade.
 
 **WHOOP integration** *(optional, off by default)*
 - A sidebar toggle shows WHOOP recovery/HRV/strain/resting-heart-rate data alongside your training data once a WHOOP account is connected.

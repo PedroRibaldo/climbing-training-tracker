@@ -1,6 +1,6 @@
 """
 The Analytics tab: effort trend, grade progression, category mix, ACWR,
-and effort-vs-grade yield over a selected range.
+and a grade pyramid over a selected range.
 """
 
 import pandas as pd
@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
 
-from data_pipeline import PipelineConfig, compute_acwr
+from data_pipeline import PipelineConfig, compute_acwr, compute_grade_pyramid
 import theme
 from . import components
 
@@ -154,27 +154,31 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
         )
 
     with col5:
-        st.markdown("**:material/scatter_plot: Effort vs. grade yield**")
-        df_yield = df_analytics.dropna(subset=['effort'])
-        df_gym_yield = df_yield[df_yield['gym_numeric'] != -1]
-        df_mb_yield = df_yield[df_yield['moonboard_numeric'] != -1]
+        st.markdown("**:material/stairs: Grade pyramid**")
+        pyramid_system = st.radio("Grade system", ["Gym", "Moonboard"], horizontal=True, key="pyramid_grade_system")
 
-        def _render_yield_chart():
-            fig_yield = go.Figure()
-            if not df_gym_yield.empty:
-                fig_yield.add_trace(go.Scatter(
-                    x=df_gym_yield['effort'], y=df_gym_yield['gym_numeric'], mode='markers', name='Gym',
-                    marker=dict(color=theme.GRADE_COLORS["Blue"], opacity=0.7),
-                ))
-            if not df_mb_yield.empty:
-                fig_yield.add_trace(go.Scatter(
-                    x=df_mb_yield['effort'], y=df_mb_yield['moonboard_numeric'], mode='markers', name='Moonboard',
-                    marker=dict(color=theme.GRADE_COLORS["Purple"], opacity=0.7),
-                ))
-            fig_yield.update_layout(template=theme.PLOTLY_TEMPLATE, xaxis_title="Effort (1-10)", yaxis_title="Max grade (encoded)")
-            st.plotly_chart(fig_yield)
+        if pyramid_system == "Gym":
+            grade_mapping, numeric_col, grade_col = PipelineConfig.GYM_MAPPING, 'gym_numeric', 'gym_grade'
+        else:
+            grade_mapping, numeric_col, grade_col = PipelineConfig.MOONBOARD_MAPPING, 'moonboard_numeric', 'moonboard_grade'
 
-        components.chart_or_empty(not df_gym_yield.empty or not df_mb_yield.empty, _render_yield_chart, "No grade data logged in this range.")
+        df_pyramid = df_analytics[df_analytics[numeric_col] != -1]
+
+        def _render_pyramid_chart():
+            counts = compute_grade_pyramid(df_pyramid, grade_col, grade_mapping)
+            bar_colors = (
+                [theme.GRADE_COLORS[grade] for grade in counts.index]
+                if pyramid_system == "Gym" else theme.GRADE_COLORS["Purple"]
+            )
+            fig_pyramid = px.bar(x=counts.index, y=counts.values, template=theme.PLOTLY_TEMPLATE)
+            fig_pyramid.update_traces(marker_color=bar_colors)
+            fig_pyramid.update_xaxes(title="Grade")
+            fig_pyramid.update_yaxes(title="Sessions")
+            st.plotly_chart(fig_pyramid)
+
+        components.chart_or_empty(
+            not df_pyramid.empty, _render_pyramid_chart, f"No {pyramid_system} grade data logged in this range."
+        )
 
     if whoop_enabled and df_whoop is not None and not df_whoop.empty:
         whoop_mask = (df_whoop['date'].dt.date >= start_date) & (df_whoop['date'].dt.date <= end_date)

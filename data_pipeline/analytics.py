@@ -102,3 +102,13 @@ def compute_kpis(df_past: pd.DataFrame) -> dict:
         'acwr_delta': acwr_delta,
         'days_since_last': int((today - last_date).days),
     }
+
+
+def compute_grade_pyramid(df: pd.DataFrame, grade_col: str, grade_mapping: dict) -> pd.Series:
+    """Session counts per grade, ordered easiest -> hardest per
+    grade_mapping's key order, with untouched grades dropped.
+    value_counts() alone sorts by frequency, not grade order - the
+    reindex here is what actually produces the pyramid shape."""
+    if df.empty:
+        return pd.Series(dtype=int)
+    return df[grade_col].value_counts().reindex(grade_mapping.keys()).dropna().astype(int)
