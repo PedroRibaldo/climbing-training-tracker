@@ -1,13 +1,8 @@
 """
-Daily WHOOP sync: refreshes the access token if needed, pulls yesterday's
-recovery/cycle data, and upserts it into `whoop_daily_metrics`. Run by
-.github/workflows/whoop_sync.yml; safe to run manually too.
-
-UNVERIFIED: written directly against developer.whoop.com's published API
-docs (endpoints confirmed against the live API reference), but has not
-been run against a real account - no WHOOP device was available when this
-was written. Confirm it works end-to-end before enabling the scheduled
-workflow (see .github/workflows/whoop_sync.yml).
+Daily WHOOP sync: refreshes the access token if needed, pulls the most
+recent scored recovery/cycle data, and upserts it into
+`whoop_daily_metrics`. Run by .github/workflows/whoop_sync.yml; safe to
+run manually too.
 """
 
 import os
@@ -43,45 +38,65 @@ def _refresh_access_token(supabase, client_id: str, client_secret: str) -> str:
         'access_token': tokens['access_token'],
         'refresh_token': tokens['refresh_token'],
         'expires_at': expires_at.isoformat(),
+        'updated_at': datetime.now(timezone.utc).isoformat(),
     }).eq('id', True).execute()
 
     return tokens['access_token']
 
 
-def _fetch_yesterday(url: str, access_token: str) -> list[dict]:
-    """One page of records intersecting yesterday (UTC)."""
-    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    yesterday = today - timedelta(days=1)
+def _as_int(value) -> int | None:
+    """WHOOP returns recovery_score/resting_heart_rate as floats (e.g.
+    31.0); the Postgres columns are INTEGER and reject decimal-formatted
+    text, so these need an explicit round-trip through int()."""
+    return None if value is None else int(round(value))
+
+
+def _fetch_recent(url: str, access_token: str, days: int = 3) -> list[dict]:
+    """Records from the last `days` days. A window wider than 1 day is
+    needed because WHOOP attaches a recovery to the *new* cycle that
+    starts when you wake up - that cycle's start timestamp is often
+    still "today" (UTC), not "yesterday", depending on wake time and
+    timezone, so a narrower window can miss the most recent recovery
+    entirely."""
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=days)
     response = requests.get(
         url,
         headers={'Authorization': f'Bearer {access_token}'},
-        params={'start': yesterday.isoformat(), 'end': today.isoformat(), 'limit': 25},
+        params={'start': start.isoformat(), 'end': end.isoformat(), 'limit': 25},
     )
     response.raise_for_status()
     return response.json().get('records', [])
 
 
-def sync_yesterday(supabase, access_token: str) -> bool:
-    """Pulls yesterday's recovery + cycle data and upserts one row into
-    whoop_daily_metrics. Returns False (and writes nothing) if WHOOP has
-    no scored recovery for that day yet (e.g. the device wasn't worn)."""
-    recoveries = [r for r in _fetch_yesterday(RECOVERY_URL, access_token) if r.get('score_state') == 'SCORED']
-    cycles = [c for c in _fetch_yesterday(CYCLE_URL, access_token) if c.get('score_state') == 'SCORED']
-
+def sync_latest(supabase, access_token: str) -> bool:
+    """Pulls the most recent scored recovery and its matching cycle, and
+    upserts one row into whoop_daily_metrics keyed to the date that
+    cycle started (the calendar day WHOOP itself associates the recovery
+    with). Returns False (and writes nothing) if there's no scored
+    recovery yet (e.g. the device hasn't completed a first sleep cycle)."""
+    recoveries = [r for r in _fetch_recent(RECOVERY_URL, access_token) if r.get('score_state') == 'SCORED']
     if not recoveries:
-        print("No scored recovery for yesterday - skipping.")
+        print("No scored recovery available yet - skipping.")
         return False
 
-    recovery = recoveries[0]['score']
-    cycle = cycles[0]['score'] if cycles else {}
-    metric_date = (datetime.now(timezone.utc) - timedelta(days=1)).date().isoformat()
+    recovery = max(recoveries, key=lambda r: r['created_at'])
+    cycles = {c['id']: c for c in _fetch_recent(CYCLE_URL, access_token)}
+    cycle = cycles.get(recovery['cycle_id'], {})
+    cycle_score = cycle.get('score', {}) if cycle.get('score_state') == 'SCORED' else {}
 
+    if cycle.get('start'):
+        metric_date = datetime.fromisoformat(cycle['start'].replace('Z', '+00:00')).date().isoformat()
+    else:
+        metric_date = datetime.now(timezone.utc).date().isoformat()
+
+    score = recovery['score']
     supabase.table('whoop_daily_metrics').upsert({
         'date': metric_date,
-        'recovery_score': recovery.get('recovery_score'),
-        'hrv_ms': recovery.get('hrv_rmssd_milli'),
-        'resting_hr': recovery.get('resting_heart_rate'),
-        'strain': cycle.get('strain'),
+        'recovery_score': _as_int(score.get('recovery_score')),
+        'hrv_ms': score.get('hrv_rmssd_milli'),
+        'resting_hr': _as_int(score.get('resting_heart_rate')),
+        'strain': cycle_score.get('strain'),
     }).execute()
     print(f"Synced WHOOP metrics for {metric_date}.")
     return True
@@ -95,7 +110,7 @@ def main():
 
     try:
         access_token = _refresh_access_token(supabase, client_id, client_secret)
-        sync_yesterday(supabase, access_token)
+        sync_latest(supabase, access_token)
     except Exception as exc:
         print(f"WHOOP sync failed: {exc}", file=sys.stderr)
         sys.exit(1)

@@ -6,12 +6,6 @@ pair, and seeds the single row in `whoop_tokens`.
 Run once, locally: `python scripts/whoop_authorize.py`. Never needs to run
 again after that - scripts/whoop_sync.py refreshes the token pair itself
 on every run.
-
-UNVERIFIED: written directly against developer.whoop.com's published OAuth
-docs (authorization/token URLs, scopes, refresh-rotation behavior), but
-WHOOP's API requires an active device + membership to complete a real
-authorization, which wasn't available when this was written. Confirm it
-actually works against a real account before relying on it.
 """
 
 import http.server
