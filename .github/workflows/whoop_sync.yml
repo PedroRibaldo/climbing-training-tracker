@@ -2,17 +2,16 @@ name: WHOOP sync
 
 on:
   workflow_dispatch:
-  # NOTE: no `schedule:` trigger yet - this stays manual-only until
-  # scripts/whoop_authorize.py has been run for real against an actual
-  # WHOOP account and a manual run of this workflow has been verified to
-  # populate whoop_daily_metrics correctly.
+  schedule:
+    # 02:50 UTC = 23:50 Brasilia time (UTC-3)
+    - cron: '50 2 * * *'
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - run: pip install -r scripts/requirements-whoop.txt
