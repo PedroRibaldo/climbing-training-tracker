@@ -31,6 +31,7 @@ A full-stack personal training platform for climbers: fast session logging, spor
 **WHOOP integration** *(optional, off by default)*
 - A sidebar toggle shows WHOOP recovery/HRV/strain/resting-heart-rate data alongside your training data once a WHOOP account is connected.
 - A daily sync script and GitHub Actions workflow keep the data current; see [Database Schema](#database-schema) for the tables involved.
+- The overdue-sessions catch-up dialog pre-fills a suggested effort from that day's WHOOP strain, adjusted by recovery when logging a past session.
 
 ---
 
@@ -72,6 +73,7 @@ Every row fetched from Supabase is validated with Pydantic before it reaches the
 │   └── store.py
 ├── whoop/                       # Optional WHOOP integration (Supabase I/O + validation)
 │   ├── models.py
+│   ├── effort.py                # Suggested-effort formula (strain + recovery -> 1-10)
 │   └── store.py
 ├── ui/                          # Tab and modal rendering, one module per screen
 │   ├── session_modal.py
@@ -90,7 +92,8 @@ Every row fetched from Supabase is validated with Pydantic before it reaches the
 ├── tests/
 │   ├── test_data_pipeline.py    # Validation, cleaning, and analytics tests
 │   ├── test_training_plan.py    # Training-plan generation engine tests
-│   └── test_whoop.py            # WHOOP metrics validation tests
+│   ├── test_whoop.py            # WHOOP metrics validation tests
+│   └── test_whoop_effort.py     # Suggested-effort formula tests
 ├── requirements.txt
 ├── requirements-dev.txt
 └── .env                         # Local Supabase credentials

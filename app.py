@@ -131,7 +131,7 @@ if st.session_state.get("due_carousel_open", False) and (
     st.session_state.get("due_carousel_index", 0) < len(st.session_state.get("due_sessions_queue", []))
 ):
     session_modal.due_sessions_carousel(
-        df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data,
+        df_all_calendar, df_past, df_whoop, df_dict, exercises_before, exercises_during, exercises_after, refresh_data,
     )
 
 # --- TOP-LEVEL NAVIGATION ---

@@ -9,6 +9,7 @@ import streamlit as st
 
 from data_pipeline import PipelineConfig, update_session, add_session, delete_session
 from training_plan import select_exercises_for_day
+from whoop import suggest_effort
 from . import components
 
 
@@ -24,7 +25,7 @@ def _category_exercise_pool(category, df_dict):
 
 def _render_session_edit_form(
     session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
-    refresh_data, is_new=False, on_saved=None,
+    refresh_data, is_new=False, on_saved=None, whoop_hint=None,
 ):
     """Renders the actual session form (fields + save/delete buttons).
 
@@ -49,7 +50,14 @@ def _render_session_edit_form(
             new_cat = st.selectbox("Category", cat_opts, index=cat_opts.index(current_cat))
 
         current_effort = None if pd.isna(session_data['effort']) else int(session_data['effort'])
-        new_effort = st.number_input("Effort (1-10)", min_value=1, max_value=10, value=current_effort, step=1)
+        effort_value = current_effort
+        if current_effort is None and whoop_hint is not None:
+            effort_value = whoop_hint['suggested_effort']
+        new_effort = st.number_input("Effort (1-10)", min_value=1, max_value=10, value=effort_value, step=1)
+        if current_effort is None and whoop_hint is not None:
+            recovery = whoop_hint['recovery_score']
+            recovery_text = f"recovery {recovery}%" if recovery is not None else "recovery unavailable"
+            st.caption(f"Suggested from WHOOP - strain {whoop_hint['strain']:.1f}, {recovery_text}")
 
         gym_opts = [""] + list(PipelineConfig.GYM_MAPPING.keys())
         current_gym = session_data['gym_grade'] if pd.notna(session_data['gym_grade']) and session_data['gym_grade'] in gym_opts else ""
@@ -210,7 +218,7 @@ def _reset_due_carousel():
 
 
 @st.dialog("Catch up on missed sessions", icon=":material/schedule:", on_dismiss=_reset_due_carousel)
-def due_sessions_carousel(df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data):
+def due_sessions_carousel(df_all_calendar, df_past, df_whoop, df_dict, exercises_before, exercises_during, exercises_after, refresh_data):
     """Opened by clicking the header notification bell when past sessions
     have no effort logged. Saving or deleting the current entry advances
     to the next; running out of the queue closes the dialog.
@@ -229,6 +237,21 @@ def due_sessions_carousel(df_all_calendar, df_past, df_dict, exercises_before, e
         return
     session_data = matches.iloc[0]
 
+    whoop_hint = None
+    if not df_whoop.empty:
+        whoop_match = df_whoop[df_whoop['date'] == session_data['date']]
+        if not whoop_match.empty:
+            whoop_row = whoop_match.iloc[0]
+            strain_val = None if pd.isna(whoop_row['strain']) else float(whoop_row['strain'])
+            recovery_val = None if pd.isna(whoop_row['recovery_score']) else int(whoop_row['recovery_score'])
+            suggested = suggest_effort(strain_val, recovery_val)
+            if suggested is not None:
+                whoop_hint = {
+                    'suggested_effort': suggested,
+                    'strain': strain_val,
+                    'recovery_score': recovery_val,
+                }
+
     col_prev, col_mid, col_next = st.columns([1, 3, 1])
     with col_prev:
         if st.button("", icon=":material/chevron_left:", disabled=(idx == 0), width="stretch", key="due_carousel_prev", help="Previous overdue session"):
@@ -245,7 +268,7 @@ def due_sessions_carousel(df_all_calendar, df_past, df_dict, exercises_before, e
 
     _render_session_edit_form(
         session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
-        refresh_data, is_new=False, on_saved=_advance_due_carousel,
+        refresh_data, is_new=False, on_saved=_advance_due_carousel, whoop_hint=whoop_hint,
     )
 
 
