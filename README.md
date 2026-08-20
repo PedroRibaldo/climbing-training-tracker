@@ -27,9 +27,10 @@ A full-stack personal training platform for climbers: fast session logging, spor
 - Effort trend and gym/Moonboard grade progression over a custom date range.
 - Acute:Chronic Workload Ratio (ACWR) with risk-banded visualization.
 - Grade pyramid: session volume by grade.
+- All charts are view-only (hover for exact values; no zoom/pan/toolbar).
 
 **WHOOP integration** *(optional, off by default)*
-- A sidebar toggle shows WHOOP recovery/HRV/strain/resting-heart-rate data alongside your training data once a WHOOP account is connected.
+- A sidebar toggle adds a dedicated Whoop tab (HRV, strain, resting heart rate over a custom date range) and a Recovery KPI in the header once a WHOOP account is connected.
 - A daily sync script and GitHub Actions workflow keep the data current; see [Database Schema](#database-schema) for the tables involved.
 - The overdue-sessions catch-up dialog pre-fills a suggested effort from that day's WHOOP strain, adjusted by recovery when logging a past session.
 
@@ -81,7 +82,8 @@ Every row fetched from Supabase is validated with Pydantic before it reaches the
 │   ├── calendar_tab.py
 │   ├── analytics_tab.py
 │   ├── library_tab.py
-│   └── goals_tab.py
+│   ├── goals_tab.py
+│   └── whoop_tab.py
 ├── scripts/                     # One-off / scheduled utilities, not part of app.py's import graph
 │   ├── whoop_authorize.py       # One-time local WHOOP OAuth setup
 │   ├── whoop_sync.py            # Daily WHOOP data pull, run by CI

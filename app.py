@@ -13,7 +13,7 @@ from training_plan import get_active_goal, check_and_update_goal_completion
 import theme
 import whoop
 
-from ui import session_modal, calendar_tab, analytics_tab, library_tab, goals_tab
+from ui import session_modal, calendar_tab, analytics_tab, library_tab, goals_tab, whoop_tab
 
 st.set_page_config(page_title="Climbing Training Tracker", page_icon=":material/terrain:", layout="wide")
 
@@ -135,10 +135,18 @@ if st.session_state.get("due_carousel_open", False) and (
     )
 
 # --- TOP-LEVEL NAVIGATION ---
-tab_calendar, tab_analytics, tab_library, tab_goals = st.tabs([
-    ":material/calendar_month: Calendar", ":material/analytics: Analytics",
-    ":material/fitness_center: Exercise library", ":material/flag: Goals",
-])
+tab_labels = [":material/calendar_month: Calendar", ":material/analytics: Analytics"]
+if whoop_enabled:
+    tab_labels.append(":material/monitor_heart: Whoop")
+tab_labels += [":material/fitness_center: Exercise library", ":material/flag: Goals"]
+
+tabs = st.tabs(tab_labels)
+tab_calendar, tab_analytics = tabs[0], tabs[1]
+if whoop_enabled:
+    tab_whoop, tab_library, tab_goals = tabs[2], tabs[3], tabs[4]
+else:
+    tab_whoop = None
+    tab_library, tab_goals = tabs[2], tabs[3]
 
 with tab_calendar:
     calendar_tab.render(
@@ -146,7 +154,11 @@ with tab_calendar:
     )
 
 with tab_analytics:
-    analytics_tab.render(df_past, whoop_enabled, df_whoop)
+    analytics_tab.render(df_past)
+
+if whoop_enabled:
+    with tab_whoop:
+        whoop_tab.render(df_whoop)
 
 with tab_library:
     library_tab.render(df_dict, refresh_data)

@@ -63,3 +63,13 @@ def chart_or_empty(has_data, render_fn, empty_message, empty_icon=":material/inf
         render_fn()
     else:
         st.info(empty_message, icon=empty_icon)
+
+
+STATIC_CHART_CONFIG = {"displayModeBar": False, "scrollZoom": False}
+
+
+def render_chart(fig):
+    """Renders a Plotly figure as view-only: no toolbar, no zoom/pan/select
+    drag. Hover tooltips still work."""
+    fig.update_layout(dragmode=False)
+    st.plotly_chart(fig, config=STATIC_CHART_CONFIG)

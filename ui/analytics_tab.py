@@ -14,7 +14,7 @@ import theme
 from . import components
 
 
-def render(df_past, whoop_enabled=False, df_whoop=None):
+def render(df_past):
     today_date = pd.to_datetime('today').date()
     last_month_date = today_date - pd.Timedelta(days=30)
 
@@ -47,7 +47,7 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
             fig.update_traces(line_color=theme.ACCENT, marker=dict(color=theme.ACCENT, size=8))
             fig.update_yaxes(title="Effort (1-10)", range=[0, 10.5])
             fig.update_xaxes(title="", tickformat="%d/%m")
-            st.plotly_chart(fig)
+            components.render_chart(fig)
 
         components.chart_or_empty(not df_effort.empty, _render_effort_chart, "No effort data logged.")
 
@@ -87,7 +87,7 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
                 tickvals=list(mb_rev_map.keys()), ticktext=list(mb_rev_map.values()),
             )
             fig_grades.update_xaxes(title="", tickformat="%d/%m")
-            st.plotly_chart(fig_grades)
+            components.render_chart(fig_grades)
 
         components.chart_or_empty(not df_gym.empty or not df_moonboard.empty, _render_grade_chart, "No grade data logged.")
 
@@ -108,7 +108,7 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
                 textinfo='percent+label',
                 marker=dict(line=dict(color=theme.BASALT, width=1.5)),
             )
-            st.plotly_chart(fig_dist)
+            components.render_chart(fig_dist)
 
         components.chart_or_empty(not df_dist.empty, _render_distribution_chart, "No training sessions logged.")
 
@@ -144,7 +144,7 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
             fig_acwr.update_layout(template=theme.PLOTLY_TEMPLATE, legend=dict(orientation='h', y=1.2, x=0))
             fig_acwr.update_yaxes(title="ACWR", range=[0, band_top])
             fig_acwr.update_xaxes(title="", type='date', tickformat="%d/%m")
-            st.plotly_chart(fig_acwr)
+            components.render_chart(fig_acwr)
             st.caption("Recent (7-day) vs. baseline (28-day) training load. Needs a few weeks of consistent logging to be meaningful.")
 
         components.chart_or_empty(
@@ -174,58 +174,8 @@ def render(df_past, whoop_enabled=False, df_whoop=None):
             fig_pyramid.update_traces(marker_color=bar_colors)
             fig_pyramid.update_xaxes(title="Grade")
             fig_pyramid.update_yaxes(title="Sessions")
-            st.plotly_chart(fig_pyramid)
+            components.render_chart(fig_pyramid)
 
         components.chart_or_empty(
             not df_pyramid.empty, _render_pyramid_chart, f"No {pyramid_system} grade data logged in this range."
         )
-
-    if whoop_enabled and df_whoop is not None and not df_whoop.empty:
-        whoop_mask = (df_whoop['date'].dt.date >= start_date) & (df_whoop['date'].dt.date <= end_date)
-        df_whoop_range = df_whoop[whoop_mask].sort_values(by='date')
-
-        st.subheader(":material/monitor_heart: WHOOP recovery trends")
-
-        if not df_whoop_range.empty:
-            col_hrv, col_strain, col_rhr = st.columns(3)
-
-            with col_hrv:
-                st.markdown("**HRV**")
-                df_hrv = df_whoop_range.dropna(subset=['hrv_ms'])
-
-                def _render_hrv_chart():
-                    fig_hrv = px.line(df_hrv, x='date', y='hrv_ms', markers=True, template=theme.PLOTLY_TEMPLATE)
-                    fig_hrv.update_traces(line_color=theme.GRADE_COLORS["Blue"], marker=dict(color=theme.GRADE_COLORS["Blue"]))
-                    fig_hrv.update_yaxes(title="HRV (ms)")
-                    fig_hrv.update_xaxes(title="", tickformat="%d/%m")
-                    st.plotly_chart(fig_hrv)
-
-                components.chart_or_empty(not df_hrv.empty, _render_hrv_chart, "No HRV data in this range.")
-
-            with col_strain:
-                st.markdown("**Strain**")
-                df_strain = df_whoop_range.dropna(subset=['strain'])
-
-                def _render_strain_chart():
-                    fig_strain = px.line(df_strain, x='date', y='strain', markers=True, template=theme.PLOTLY_TEMPLATE)
-                    fig_strain.update_traces(line_color=theme.GRADE_COLORS["Red"], marker=dict(color=theme.GRADE_COLORS["Red"]))
-                    fig_strain.update_yaxes(title="Strain (0-21)", range=[0, 21])
-                    fig_strain.update_xaxes(title="", tickformat="%d/%m")
-                    st.plotly_chart(fig_strain)
-
-                components.chart_or_empty(not df_strain.empty, _render_strain_chart, "No strain data in this range.")
-
-            with col_rhr:
-                st.markdown("**Resting HR**")
-                df_rhr = df_whoop_range.dropna(subset=['resting_hr'])
-
-                def _render_rhr_chart():
-                    fig_rhr = px.line(df_rhr, x='date', y='resting_hr', markers=True, template=theme.PLOTLY_TEMPLATE)
-                    fig_rhr.update_traces(line_color=theme.GRADE_COLORS["Green"], marker=dict(color=theme.GRADE_COLORS["Green"]))
-                    fig_rhr.update_yaxes(title="Resting HR (bpm)")
-                    fig_rhr.update_xaxes(title="", tickformat="%d/%m")
-                    st.plotly_chart(fig_rhr)
-
-                components.chart_or_empty(not df_rhr.empty, _render_rhr_chart, "No resting HR data in this range.")
-        else:
-            st.info("No WHOOP data logged in this range yet.")
