@@ -5,6 +5,7 @@ date range. Only rendered when the WHOOP sidebar toggle is enabled.
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 import theme
@@ -81,15 +82,61 @@ def render(df_whoop, df_whoop_workouts):
 
         components.chart_or_empty(not df_rhr.empty, _render_rhr_chart, "No resting HR data in this range.")
 
-    st.markdown("**Climbing workout duration**")
     workouts_mask = (df_whoop_workouts['date'].dt.date >= start_date) & (df_whoop_workouts['date'].dt.date <= end_date) if not df_whoop_workouts.empty else pd.Series(dtype=bool)
     df_workouts_range = df_whoop_workouts[workouts_mask].sort_values(by='date') if not df_whoop_workouts.empty else df_whoop_workouts
 
-    def _render_duration_chart():
-        fig_duration = px.bar(df_workouts_range, x='date', y='duration_min', template=theme.PLOTLY_TEMPLATE)
-        fig_duration.update_traces(marker_color=theme.ACCENT)
-        fig_duration.update_yaxes(title="Duration (min)")
-        fig_duration.update_xaxes(title="", tickformat="%d/%m")
-        components.render_chart(fig_duration)
+    col_zones, col_calories = st.columns(2)
 
-    components.chart_or_empty(not df_workouts_range.empty, _render_duration_chart, "No climbing workouts logged in this range.")
+    with col_zones:
+        st.markdown("**HR zone breakdown**")
+
+        def _render_zone_chart():
+            zone_labels = ["Zone 0", "Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"]
+            zone_colors = [
+                theme.STONE, theme.GRADE_COLORS["Blue"], theme.GRADE_COLORS["Green"],
+                theme.GRADE_COLORS["Yellow"], theme.GRADE_COLORS["Red"], theme.GRADE_COLORS["Purple"],
+            ]
+            fig_zones = go.Figure()
+            for n, (label, color) in enumerate(zip(zone_labels, zone_colors)):
+                fig_zones.add_trace(go.Bar(
+                    x=df_workouts_range['date'], y=df_workouts_range[f'zone_{n}_min'], name=label,
+                    marker=dict(color=color), hovertemplate=f"{label}: %{{y:.0f}} min<extra></extra>",
+                ))
+            fig_zones.update_layout(template=theme.PLOTLY_TEMPLATE, barmode='stack')
+            fig_zones.update_yaxes(title="Minutes")
+            fig_zones.update_xaxes(title="", tickformat="%d/%m")
+            components.render_chart(fig_zones)
+
+        components.chart_or_empty(not df_workouts_range.empty, _render_zone_chart, "No climbing workouts logged in this range.")
+
+    with col_calories:
+        st.markdown("**Calories**")
+
+        def _render_calories_chart():
+            fig_calories = px.bar(df_workouts_range, x='date', y='calories', template=theme.PLOTLY_TEMPLATE)
+            fig_calories.update_traces(marker_color=theme.ACCENT)
+            fig_calories.update_yaxes(title="Calories")
+            fig_calories.update_xaxes(title="", tickformat="%d/%m")
+            components.render_chart(fig_calories)
+
+        components.chart_or_empty(not df_workouts_range.empty, _render_calories_chart, "No climbing workouts logged in this range.")
+
+    st.markdown("**Avg / Max heart rate**")
+    df_hr = df_workouts_range.dropna(subset=['avg_hr', 'max_hr'])
+
+    def _render_hr_chart():
+        fig_hr = go.Figure()
+        fig_hr.add_trace(go.Scatter(
+            x=df_hr['date'], y=df_hr['avg_hr'], mode='lines+markers',
+            name='Avg HR', line=dict(color=theme.GRADE_COLORS["Blue"]), marker=dict(color=theme.GRADE_COLORS["Blue"]),
+        ))
+        fig_hr.add_trace(go.Scatter(
+            x=df_hr['date'], y=df_hr['max_hr'], mode='lines+markers',
+            name='Max HR', line=dict(color=theme.GRADE_COLORS["Red"]), marker=dict(color=theme.GRADE_COLORS["Red"]),
+        ))
+        fig_hr.update_layout(template=theme.PLOTLY_TEMPLATE)
+        fig_hr.update_yaxes(title="Heart rate (bpm)")
+        fig_hr.update_xaxes(title="", tickformat="%d/%m")
+        components.render_chart(fig_hr)
+
+    components.chart_or_empty(not df_hr.empty, _render_hr_chart, "No heart rate data in this range.")

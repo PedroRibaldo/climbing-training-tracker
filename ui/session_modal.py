@@ -120,10 +120,6 @@ def _render_session_edit_form(
                 margin=dict(l=10, r=10, t=10, b=30),
             )
             components.render_chart(fig_zones)
-            st.html(theme.color_key_html(
-                {f"{label} ({minutes:.0f}m)": color for label, minutes, color in zip(zone_labels, workout_hint['zones'], zone_colors)},
-                title="HR Zones",
-            ))
 
     with st.container(border=True):
         st.markdown("**Exercises**")

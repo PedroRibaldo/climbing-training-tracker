@@ -10,3 +10,4 @@ models/store internally; this file re-exports the full public surface so
 from .effort import suggest_effort
 from .models import WhoopConfig, WhoopMetricsRecord, WhoopClimbingWorkoutRecord
 from .store import get_daily_metrics, get_latest_metrics, get_climbing_workouts, is_enabled, set_enabled
+from .weekly_summary import compute_weekly_workout_averages

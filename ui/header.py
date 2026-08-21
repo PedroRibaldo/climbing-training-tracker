@@ -43,17 +43,20 @@ def render(
             st.session_state.due_carousel_open = True
 
     with st.container(horizontal=True):
-        st.metric(":material/local_fire_department: Current streak", f"{kpis['streak']} d", border=True)
         st.metric(":material/date_range: This week", kpis['sessions_this_week'], border=True)
         acwr_value = "–" if kpis['acwr_current'] is None else f"{kpis['acwr_current']:.2f}"
         acwr_delta = None if kpis['acwr_delta'] is None else f"{kpis['acwr_delta']:+.2f}"
         st.metric(":material/monitoring: ACWR", acwr_value, delta=acwr_delta, delta_color="inverse", border=True)
-        since_last = "–" if kpis['days_since_last'] is None else f"{kpis['days_since_last']} d"
-        st.metric(":material/schedule: Since last session", since_last, border=True)
         if whoop_enabled and not df_whoop.empty:
             recovery = df_whoop.iloc[-1]['recovery_score']
             if pd.notna(recovery):
                 st.metric(":material/monitor_heart: Recovery", f"{int(recovery)}%", border=True)
+        if whoop_enabled:
+            weekly_averages = whoop.compute_weekly_workout_averages(df_whoop_workouts)
+            avg_duration_text = "–" if weekly_averages['avg_duration_min'] is None else f"{weekly_averages['avg_duration_min']:.0f} min"
+            st.metric(":material/timer: Avg duration (week)", avg_duration_text, border=True)
+            avg_hr_text = "–" if weekly_averages['avg_hr'] is None else f"{weekly_averages['avg_hr']:.0f} bpm"
+            st.metric(":material/monitor_heart: Avg HR (week)", avg_hr_text, border=True)
 
     if st.session_state.get("due_carousel_open", False) and (
         st.session_state.get("due_carousel_index", 0) < len(st.session_state.get("due_sessions_queue", []))
