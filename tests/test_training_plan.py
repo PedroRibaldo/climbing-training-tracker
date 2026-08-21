@@ -5,11 +5,18 @@ hand-built inputs.
 
 Run with: pytest
 """
+from datetime import datetime
+
 import pandas as pd
 import pytest
+from pydantic import ValidationError
 
+from data_pipeline import PipelineConfig
 from training_plan import (
-    PlanConfig, compute_plan_length, build_phase_breakdown, compute_adherence,
+    PlanConfig, GoalRecord, compute_plan_length, build_phase_breakdown, schedule_week,
+    _training_day_slots, apply_acwr_guardrail, _category_neglect_scores, _category_effort_overrides,
+    select_exercises_for_day, generate_plan, preview_plan, _current_best_grade, _recent_daily_loads,
+    _existing_session_dates, compute_adherence,
 )
 
 
@@ -121,9 +128,6 @@ class TestBuildPhaseBreakdownNeglectScores:
             assert all(w > 0 for w in phase['weights'].values())
 
 
-from training_plan import schedule_week, _training_day_slots
-
-
 class TestScheduleWeek:
 
     def test_returns_seven_days(self, config):
@@ -183,9 +187,6 @@ class TestTrainingDaySlots:
         assert _training_day_slots(start_weekday=0, training_weekdays=set()) == set()
 
 
-from training_plan import apply_acwr_guardrail
-
-
 class TestApplyAcwrGuardrail:
 
     def test_steady_state_load_leaves_schedule_unchanged(self, config):
@@ -240,9 +241,6 @@ class TestApplyAcwrGuardrailEffortOverrides:
         assert result == categories
 
 
-from training_plan import _category_neglect_scores
-
-
 def make_past_df_for_neglect(rows):
     df = pd.DataFrame(rows)
     if not df.empty:
@@ -291,9 +289,6 @@ class TestCategoryNeglectScores:
         assert 'Free' not in with_free
 
 
-from training_plan import _category_effort_overrides
-
-
 class TestCategoryEffortOverrides:
 
     def test_no_history_returns_empty_dict(self, config):
@@ -311,9 +306,6 @@ class TestCategoryEffortOverrides:
         ])
         overrides = _category_effort_overrides(df_past)
         assert overrides['Strength'] == pytest.approx(7.0)
-
-
-from training_plan import select_exercises_for_day
 
 
 def make_exercise_df(rows):
@@ -434,9 +426,6 @@ class TestSelectExercisesForDay:
         assert result['before'] == []
 
 
-from training_plan import generate_plan, preview_plan, _current_best_grade, _recent_daily_loads
-
-
 def make_past_df(rows):
     df = pd.DataFrame(rows)
     if not df.empty:
@@ -447,7 +436,6 @@ def make_past_df(rows):
 class TestCurrentBestGrade:
 
     def test_returns_highest_ordinal_grade(self, config):
-        from data_pipeline import PipelineConfig
         df_past = make_past_df([
             {'date': '2026-06-01', 'gym_grade': 'Blue', 'gym_numeric': 3, 'moonboard_grade': None, 'moonboard_numeric': -1},
             {'date': '2026-06-05', 'gym_grade': 'Red', 'gym_numeric': 4, 'moonboard_grade': None, 'moonboard_numeric': -1},
@@ -455,7 +443,6 @@ class TestCurrentBestGrade:
         assert _current_best_grade(df_past, 'gym', PipelineConfig()) == 'Red'
 
     def test_returns_none_when_nothing_logged(self, config):
-        from data_pipeline import PipelineConfig
         df_past = make_past_df([])
         assert _current_best_grade(df_past, 'gym', PipelineConfig()) is None
 
@@ -601,11 +588,6 @@ class TestPreviewPlan:
         assert result['total_weeks'] == 30
 
 
-from datetime import datetime
-from pydantic import ValidationError
-from training_plan import GoalRecord
-
-
 class TestGoalRecord:
 
     def test_valid_goal_parses(self):
@@ -634,9 +616,6 @@ class TestGoalRecord:
                 'start_grade': None, 'weekly_frequency': 1, 'total_weeks': 9,
                 'phase_breakdown': [], 'status': 'active', 'training_weekdays': ['Notaday'],
             })
-
-
-from training_plan import _existing_session_dates
 
 
 class TestExistingSessionDates:

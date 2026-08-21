@@ -40,7 +40,6 @@ def _render_session_edit_form(
     with st.container(border=True):
         st.markdown("**Details**")
 
-        # 1. Form inputs
         if is_new:
             cat_opts = PipelineConfig.ALLOWED_CATEGORIES
             new_cat = st.selectbox("Category", cat_opts)
@@ -68,28 +67,23 @@ def _render_session_edit_form(
         new_mb = st.selectbox("Max Moonboard grade", mb_opts, index=mb_opts.index(current_mb))
 
     with st.container(border=True):
-        # 2. Exercises
         st.markdown("**Exercises**")
 
         session_key = session_data['id'] if pd.notna(session_data['id']) else session_data['date'].strftime('%Y%m%d')
 
-        # Determine default selections
         if is_new:
-            # Smart State Injection: Fetch "Before" and "After" from the most recent past session
+            # Before/After default to the most recent past session's picks
             default_before = []
             default_during = _category_exercise_pool(new_cat, df_dict)
             default_after = []
 
             if not df_past.empty:
-                # Grab the absolute most recent session logged
                 latest_session = df_past.sort_values(by='date', ascending=False).iloc[0]
                 if pd.notna(latest_session['exercises']):
                     last_exercises = [ex.strip() for ex in str(latest_session['exercises']).split(',') if ex.strip()]
-                    # Only inject the ones that belong to the Before or After phases
                     default_before = [ex for ex in last_exercises if ex in exercises_before]
                     default_after = [ex for ex in last_exercises if ex in exercises_after]
         else:
-            # Editing an existing session: Load its specific exercises
             current_text = "" if pd.isna(session_data['exercises']) else str(session_data['exercises'])
             current_list = [ex.strip() for ex in current_text.split(',') if ex.strip()]
 
@@ -103,7 +97,6 @@ def _render_session_edit_form(
             st.session_state[during_key] = _category_exercise_pool(new_cat, df_dict)
         st.session_state[prev_cat_key] = new_cat
 
-        # Render Mobile Tabs
         tab1, tab2, tab3 = st.tabs([
             ":material/directions_run: Warm-up", ":material/terrain: Climbing", ":material/self_improvement: Cool-down",
         ])
@@ -124,7 +117,6 @@ def _render_session_edit_form(
                 key=f"ex_after_{session_key}", label_visibility="collapsed"
             )
 
-        # Combine them all into a single list for the save function
         selected_exercises = selected_before + selected_during + selected_after
 
     def _finish():
@@ -135,7 +127,6 @@ def _render_session_edit_form(
         else:
             st.rerun()
 
-    # 3. Save & delete actions
     if is_new:
         if st.button("Log new session", icon=":material/save:", type="primary", width="stretch"):
             new_session_data = {
