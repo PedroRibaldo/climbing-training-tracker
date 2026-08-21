@@ -102,8 +102,14 @@ def render(df_whoop, df_whoop_workouts):
                     x=df_workouts_range['date'], y=df_workouts_range[f'zone_{n}_min'], name=label,
                     marker=dict(color=color), hovertemplate=f"{label}: %{{y:.0f}} min<extra></extra>",
                 ))
+            total_minutes = df_workouts_range[[f'zone_{n}_min' for n in range(6)]].sum(axis=1)
+            fig_zones.add_trace(go.Scatter(
+                x=df_workouts_range['date'], y=total_minutes, mode='text',
+                text=[f"{t:.0f} min" for t in total_minutes], textposition='top center',
+                textfont=dict(color=theme.CHALK, size=12), showlegend=False, hoverinfo='skip',
+            ))
             fig_zones.update_layout(template=theme.PLOTLY_TEMPLATE, barmode='stack')
-            fig_zones.update_yaxes(title="Minutes")
+            fig_zones.update_yaxes(title="Minutes", range=[0, total_minutes.max() * 1.15 if not total_minutes.empty else 1])
             fig_zones.update_xaxes(title="", tickformat="%d/%m")
             components.render_chart(fig_zones)
 
@@ -113,9 +119,13 @@ def render(df_whoop, df_whoop_workouts):
         st.markdown("**Calories**")
 
         def _render_calories_chart():
-            fig_calories = px.bar(df_workouts_range, x='date', y='calories', template=theme.PLOTLY_TEMPLATE)
-            fig_calories.update_traces(marker_color=theme.ACCENT)
-            fig_calories.update_yaxes(title="Calories")
+            fig_calories = px.line(df_workouts_range, x='date', y='calories', markers=True, template=theme.PLOTLY_TEMPLATE)
+            fig_calories.update_traces(
+                line_color=theme.ACCENT, marker=dict(color=theme.ACCENT),
+                mode='lines+markers+text', texttemplate="%{y:.0f}", textposition='top center',
+                textfont=dict(color=theme.CHALK),
+            )
+            fig_calories.update_yaxes(title="Calories", range=[0, df_workouts_range['calories'].max() * 1.15 if not df_workouts_range.empty else 1])
             fig_calories.update_xaxes(title="", tickformat="%d/%m")
             components.render_chart(fig_calories)
 
@@ -128,11 +138,13 @@ def render(df_whoop, df_whoop_workouts):
         fig_hr = go.Figure()
         fig_hr.add_trace(go.Scatter(
             x=df_hr['date'], y=df_hr['avg_hr'], mode='lines+markers',
-            name='Avg HR', line=dict(color=theme.GRADE_COLORS["Blue"]), marker=dict(color=theme.GRADE_COLORS["Blue"]),
+            name='Avg HR', line=dict(color=theme.GRADE_COLORS["Blue"], dash='solid'),
+            marker=dict(color=theme.GRADE_COLORS["Blue"], symbol='circle', size=8),
         ))
         fig_hr.add_trace(go.Scatter(
             x=df_hr['date'], y=df_hr['max_hr'], mode='lines+markers',
-            name='Max HR', line=dict(color=theme.GRADE_COLORS["Red"]), marker=dict(color=theme.GRADE_COLORS["Red"]),
+            name='Max HR', line=dict(color=theme.GRADE_COLORS["Red"], dash='dash'),
+            marker=dict(color=theme.GRADE_COLORS["Red"], symbol='diamond', size=8),
         ))
         fig_hr.update_layout(template=theme.PLOTLY_TEMPLATE)
         fig_hr.update_yaxes(title="Heart rate (bpm)")
