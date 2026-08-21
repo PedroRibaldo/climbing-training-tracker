@@ -3,9 +3,12 @@ One-time WHOOP OAuth authorization: opens the WHOOP consent page, catches
 the redirect on localhost, exchanges the code for an access/refresh token
 pair, and seeds the single row in `whoop_tokens`.
 
-Run once, locally: `python scripts/whoop_authorize.py`. Never needs to run
-again after that - scripts/whoop_sync.py refreshes the token pair itself
-on every run.
+Run once, locally: `python scripts/whoop_authorize.py`. Doesn't normally
+need to run again - scripts/whoop_sync.py refreshes the token pair itself
+on every run. The exception: WHOOP scopes are fixed at consent time, so
+adding a scope to SCOPES (as happened when climbing-workout sync was
+added) requires re-running this script once to get a token pair that
+actually carries the new scope - a refresh alone cannot grant it.
 """
 
 import http.server
@@ -22,7 +25,7 @@ from supabase import create_client
 
 AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2/auth"
 TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
-SCOPES = "offline read:recovery read:cycles"
+SCOPES = "offline read:recovery read:cycles read:workout"
 REDIRECT_PORT = 8942
 REDIRECT_URI = f"http://localhost:{REDIRECT_PORT}/callback"
 

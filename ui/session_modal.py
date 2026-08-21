@@ -5,8 +5,10 @@ catch-up carousel, plus the carousel itself.
 
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
+import theme
 from data_pipeline import PipelineConfig, update_session, add_session, delete_session
 from training_plan import select_exercises_for_day
 from whoop import suggest_effort
@@ -23,9 +25,29 @@ def _category_exercise_pool(category, df_dict):
     return select_exercises_for_day(category, df_dict, {})['during']
 
 
+def _lookup_workout_hint(df_whoop_workouts, session_date):
+    """That date's combined WHOOP climbing-workout stats, or None if WHOOP
+    is disabled or nothing has synced for that day yet."""
+    if df_whoop_workouts.empty:
+        return None
+    match = df_whoop_workouts[df_whoop_workouts['date'] == session_date]
+    if match.empty:
+        return None
+    row = match.iloc[0]
+    if pd.isna(row['duration_min']):
+        return None
+    return {
+        'duration_min': float(row['duration_min']),
+        'calories': None if pd.isna(row['calories']) else int(row['calories']),
+        'avg_hr': None if pd.isna(row['avg_hr']) else int(row['avg_hr']),
+        'max_hr': None if pd.isna(row['max_hr']) else int(row['max_hr']),
+        'zones': [float(row[f'zone_{n}_min']) if pd.notna(row[f'zone_{n}_min']) else 0.0 for n in range(6)],
+    }
+
+
 def _render_session_edit_form(
     session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
-    refresh_data, is_new=False, on_saved=None, whoop_hint=None,
+    refresh_data, is_new=False, on_saved=None, whoop_hint=None, workout_hint=None,
 ):
     """Renders the actual session form (fields + save/delete buttons).
 
@@ -65,6 +87,43 @@ def _render_session_edit_form(
         mb_opts = [""] + list(PipelineConfig.MOONBOARD_MAPPING.keys())
         current_mb = session_data['moonboard_grade'] if pd.notna(session_data['moonboard_grade']) and session_data['moonboard_grade'] in mb_opts else ""
         new_mb = st.selectbox("Max Moonboard grade", mb_opts, index=mb_opts.index(current_mb))
+
+    if workout_hint is not None:
+        with st.container(border=True):
+            st.markdown("**WHOOP climbing workout**")
+            col_dur, col_cal = st.columns(2)
+            with col_dur:
+                st.metric("Duration", f"{workout_hint['duration_min']:.0f} min")
+            with col_cal:
+                st.metric("Calories", "–" if workout_hint['calories'] is None else str(workout_hint['calories']))
+            col_avg, col_max = st.columns(2)
+            with col_avg:
+                st.metric("Avg HR", "–" if workout_hint['avg_hr'] is None else f"{workout_hint['avg_hr']} bpm")
+            with col_max:
+                st.metric("Max HR", "–" if workout_hint['max_hr'] is None else f"{workout_hint['max_hr']} bpm")
+
+            zone_labels = ["Zone 0", "Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"]
+            zone_colors = [
+                theme.STONE, theme.GRADE_COLORS["Blue"], theme.GRADE_COLORS["Green"],
+                theme.GRADE_COLORS["Yellow"], theme.GRADE_COLORS["Red"], theme.GRADE_COLORS["Purple"],
+            ]
+            fig_zones = go.Figure()
+            for label, minutes, color in zip(zone_labels, workout_hint['zones'], zone_colors):
+                fig_zones.add_trace(go.Bar(
+                    y=["Zones"], x=[minutes], name=label, orientation='h',
+                    marker=dict(color=color), hovertemplate=f"{label}: %{{x:.0f}} min<extra></extra>",
+                ))
+            fig_zones.update_layout(
+                template=theme.PLOTLY_TEMPLATE, barmode='stack', height=60,
+                showlegend=False,
+                xaxis=dict(title="Minutes"), yaxis=dict(visible=False),
+                margin=dict(l=10, r=10, t=10, b=30),
+            )
+            components.render_chart(fig_zones)
+            st.html(theme.color_key_html(
+                {f"{label} ({minutes:.0f}m)": color for label, minutes, color in zip(zone_labels, workout_hint['zones'], zone_colors)},
+                title="HR Zones",
+            ))
 
     with st.container(border=True):
         st.markdown("**Exercises**")
@@ -182,14 +241,15 @@ def _reset_delete_confirmation():
 @st.dialog("Session details", icon=":material/edit:", on_dismiss=_reset_delete_confirmation)
 def edit_session_modal(
     session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
-    refresh_data, is_new=False,
+    refresh_data, df_whoop_workouts, is_new=False,
 ):
     """Pop-up form for viewing/editing an existing session, or logging a
     new one when is_new=True
     """
+    workout_hint = _lookup_workout_hint(df_whoop_workouts, session_data['date'])
     _render_session_edit_form(
         session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
-        refresh_data, is_new=is_new,
+        refresh_data, is_new=is_new, workout_hint=workout_hint,
     )
 
 
@@ -209,7 +269,7 @@ def _reset_due_carousel():
 
 
 @st.dialog("Catch up on missed sessions", icon=":material/schedule:", on_dismiss=_reset_due_carousel)
-def due_sessions_carousel(df_all_calendar, df_past, df_whoop, df_dict, exercises_before, exercises_during, exercises_after, refresh_data):
+def due_sessions_carousel(df_all_calendar, df_past, df_whoop, df_whoop_workouts, df_dict, exercises_before, exercises_during, exercises_after, refresh_data):
     """Opened by clicking the header notification bell when past sessions
     have no effort logged. Saving or deleting the current entry advances
     to the next; running out of the queue closes the dialog.
@@ -243,6 +303,8 @@ def due_sessions_carousel(df_all_calendar, df_past, df_whoop, df_dict, exercises
                     'recovery_score': recovery_val,
                 }
 
+    workout_hint = _lookup_workout_hint(df_whoop_workouts, session_data['date'])
+
     col_prev, col_mid, col_next = st.columns([1, 3, 1])
     with col_prev:
         if st.button("", icon=":material/chevron_left:", disabled=(idx == 0), width="stretch", key="due_carousel_prev", help="Previous overdue session"):
@@ -259,7 +321,7 @@ def due_sessions_carousel(df_all_calendar, df_past, df_whoop, df_dict, exercises
 
     _render_session_edit_form(
         session_data, df_past, df_dict, exercises_before, exercises_during, exercises_after,
-        refresh_data, is_new=False, on_saved=_advance_due_carousel, whoop_hint=whoop_hint,
+        refresh_data, is_new=False, on_saved=_advance_due_carousel, whoop_hint=whoop_hint, workout_hint=workout_hint,
     )
 
 

@@ -24,7 +24,7 @@ def render_whoop_toggle(whoop_enabled: bool, refresh_whoop_enabled) -> None:
 
 
 def render(
-    kpis, whoop_enabled, df_whoop, due_df, df_all_calendar, df_past, df_dict,
+    kpis, whoop_enabled, df_whoop, df_whoop_workouts, due_df, df_all_calendar, df_past, df_dict,
     exercises_before, exercises_during, exercises_after, refresh_data,
 ):
     """Title, notification bell, and KPI strip; opens the due-sessions
@@ -59,5 +59,5 @@ def render(
         st.session_state.get("due_carousel_index", 0) < len(st.session_state.get("due_sessions_queue", []))
     ):
         session_modal.due_sessions_carousel(
-            df_all_calendar, df_past, df_whoop, df_dict, exercises_before, exercises_during, exercises_after, refresh_data,
+            df_all_calendar, df_past, df_whoop, df_whoop_workouts, df_dict, exercises_before, exercises_during, exercises_after, refresh_data,
         )

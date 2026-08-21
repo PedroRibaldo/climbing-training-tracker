@@ -30,8 +30,9 @@ A full-stack personal training platform for climbers: fast session logging, spor
 - All charts are view-only (hover for exact values; no zoom/pan/toolbar).
 
 **WHOOP integration** *(optional, off by default)*
-- A sidebar toggle adds a dedicated Whoop tab (HRV, strain, resting heart rate over a custom date range) and a Recovery KPI in the header once a WHOOP account is connected.
-- A daily sync script and GitHub Actions workflow keep the data current; see [Database Schema](#database-schema) for the tables involved.
+- A sidebar toggle adds a dedicated Whoop tab (HRV, strain, resting heart rate, and climbing-workout duration over a custom date range) and a Recovery KPI in the header once a WHOOP account is connected.
+- The session-logging modal shows that day's WHOOP climbing-workout stats (duration, calories, avg/max heart rate, HR-zone breakdown) when one has synced, for both new and existing sessions.
+- A daily sync script and GitHub Actions workflow keep the data current; see [Database Schema](#database-schema) for the tables involved. Adding a new WHOOP scope (as when climbing-workout sync was added) requires re-running `scripts/whoop_authorize.py` once - token refreshes can't grant scopes that weren't in the original consent.
 - The overdue-sessions catch-up dialog pre-fills a suggested effort from that day's WHOOP strain, adjusted by recovery when logging a past session.
 
 ---
@@ -135,7 +136,7 @@ The dashboard opens automatically at `http://localhost:8501`.
 
 ## Database Schema
 
-Eight tables - a session can reference any number of exercises without repeating data, and a goal drives the sessions it generates.
+Nine tables - a session can reference any number of exercises without repeating data, and a goal drives the sessions it generates.
 
 ```sql
 -- One row per grade goal; only one 'active' row is expected at a time
@@ -211,6 +212,21 @@ CREATE TABLE whoop_daily_metrics (
     strain NUMERIC,           -- 0-21
     resting_hr INTEGER,
     synced_at TIMESTAMP DEFAULT now()
+);
+
+-- One row per day with a WHOOP-logged "Rock Climbing" workout
+CREATE TABLE whoop_climbing_workouts (
+    date DATE PRIMARY KEY,
+    duration_min NUMERIC,
+    calories INTEGER,
+    avg_hr INTEGER,
+    max_hr INTEGER,
+    zone_0_min NUMERIC,  -- minutes spent in each WHOOP HR zone (0-5)
+    zone_1_min NUMERIC,
+    zone_2_min NUMERIC,
+    zone_3_min NUMERIC,
+    zone_4_min NUMERIC,
+    zone_5_min NUMERIC
 );
 
 -- Single row: app-wide feature toggles (currently just WHOOP)

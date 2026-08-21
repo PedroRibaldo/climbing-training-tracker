@@ -11,7 +11,7 @@ import theme
 from . import components
 
 
-def render(df_whoop):
+def render(df_whoop, df_whoop_workouts):
     if df_whoop.empty:
         st.info("No WHOOP data logged yet.", icon=":material/info:")
         return
@@ -80,3 +80,16 @@ def render(df_whoop):
             components.render_chart(fig_rhr)
 
         components.chart_or_empty(not df_rhr.empty, _render_rhr_chart, "No resting HR data in this range.")
+
+    st.markdown("**Climbing workout duration**")
+    workouts_mask = (df_whoop_workouts['date'].dt.date >= start_date) & (df_whoop_workouts['date'].dt.date <= end_date) if not df_whoop_workouts.empty else pd.Series(dtype=bool)
+    df_workouts_range = df_whoop_workouts[workouts_mask].sort_values(by='date') if not df_whoop_workouts.empty else df_whoop_workouts
+
+    def _render_duration_chart():
+        fig_duration = px.bar(df_workouts_range, x='date', y='duration_min', template=theme.PLOTLY_TEMPLATE)
+        fig_duration.update_traces(marker_color=theme.ACCENT)
+        fig_duration.update_yaxes(title="Duration (min)")
+        fig_duration.update_xaxes(title="", tickformat="%d/%m")
+        components.render_chart(fig_duration)
+
+    components.chart_or_empty(not df_workouts_range.empty, _render_duration_chart, "No climbing workouts logged in this range.")

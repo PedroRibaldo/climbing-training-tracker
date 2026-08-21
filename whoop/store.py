@@ -10,7 +10,7 @@ import streamlit as st
 from pydantic import ValidationError
 
 from data_pipeline import _get_supabase_client
-from .models import WhoopConfig, WhoopMetricsRecord
+from .models import WhoopConfig, WhoopMetricsRecord, WhoopClimbingWorkoutRecord
 
 
 def get_daily_metrics(start_date: Optional[dt_date] = None, end_date: Optional[dt_date] = None) -> list[dict]:
@@ -31,6 +31,28 @@ def get_daily_metrics(start_date: Optional[dt_date] = None, end_date: Optional[d
             valid.append(WhoopMetricsRecord.model_validate(row).model_dump())
         except ValidationError as exc:
             st.warning(f"A WHOOP metrics row for {row.get('date', '?')} had invalid data and was skipped: {exc}")
+    return valid
+
+
+def get_climbing_workouts(start_date: Optional[dt_date] = None, end_date: Optional[dt_date] = None) -> list[dict]:
+    """WHOOP climbing-workout rows (one per date, already combined by
+    scripts/whoop_sync.py), optionally bounded to [start_date, end_date],
+    sorted by date. Invalid rows are skipped with a warning rather than
+    blanking the whole result."""
+    client = _get_supabase_client()
+    query = client.table(WhoopConfig.WORKOUTS_TABLE).select('*')
+    if start_date is not None:
+        query = query.gte('date', start_date.isoformat())
+    if end_date is not None:
+        query = query.lte('date', end_date.isoformat())
+    response = query.order('date').execute()
+
+    valid = []
+    for row in response.data:
+        try:
+            valid.append(WhoopClimbingWorkoutRecord.model_validate(row).model_dump())
+        except ValidationError as exc:
+            st.warning(f"A WHOOP climbing workout row for {row.get('date', '?')} had invalid data and was skipped: {exc}")
     return valid
 
 

@@ -11,7 +11,7 @@ import theme
 from . import session_modal
 
 
-def render(df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data):
+def render(df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data, df_whoop_workouts):
     st.html(theme.color_key_html(theme.CATEGORY_COLORS, title="Category key"))
 
     # Sessions are rendered as full-day background color blocks rather than
@@ -59,10 +59,10 @@ def render(df_all_calendar, df_past, df_dict, exercises_before, exercises_during
         if not existing_session.empty:
             session_modal.edit_session_modal(
                 existing_session.iloc[0], df_past, df_dict, exercises_before, exercises_during, exercises_after,
-                refresh_data, is_new=False,
+                refresh_data, df_whoop_workouts, is_new=False,
             )
         else:
             session_modal.edit_session_modal(
                 session_modal._make_blank_session(clean_clicked_date), df_past, df_dict,
-                exercises_before, exercises_during, exercises_after, refresh_data, is_new=True,
+                exercises_before, exercises_during, exercises_after, refresh_data, df_whoop_workouts, is_new=True,
             )

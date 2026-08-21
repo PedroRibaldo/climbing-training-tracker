@@ -13,9 +13,13 @@ import requests
 from dotenv import load_dotenv
 from supabase import create_client
 
+from whoop_workout_combine import normalize_workout, combine_climbing_workouts
+
 TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
 RECOVERY_URL = "https://api.prod.whoop.com/developer/v2/recovery"
 CYCLE_URL = "https://api.prod.whoop.com/developer/v2/cycle"
+WORKOUT_URL = "https://api.prod.whoop.com/developer/v2/activity/workout"
+CLIMBING_SPORT_NAME = "Rock Climbing"
 
 
 def _refresh_access_token(supabase, client_id: str, client_secret: str) -> str:
@@ -102,6 +106,31 @@ def sync_latest(supabase, access_token: str) -> bool:
     return True
 
 
+def sync_climbing_workouts(supabase, access_token: str) -> None:
+    """Pulls recent workouts, keeps only scored entries tagged
+    CLIMBING_SPORT_NAME, groups them by the UTC date each one started
+    (same convention sync_latest uses for metric_date), and upserts one
+    combined row per date into whoop_climbing_workouts. Writes nothing for
+    days with no matching workout."""
+    workouts = [
+        w for w in _fetch_recent(WORKOUT_URL, access_token)
+        if w.get('score_state') == 'SCORED' and w.get('sport_name') == CLIMBING_SPORT_NAME
+    ]
+
+    by_date: dict[str, list[dict]] = {}
+    for raw in workouts:
+        workout_date = datetime.fromisoformat(raw['start'].replace('Z', '+00:00')).date().isoformat()
+        by_date.setdefault(workout_date, []).append(normalize_workout(raw))
+
+    for workout_date, normalized in by_date.items():
+        combined = combine_climbing_workouts(normalized)
+        supabase.table('whoop_climbing_workouts').upsert({'date': workout_date, **combined}).execute()
+        print(f"Synced {len(normalized)} climbing workout(s) for {workout_date}.")
+
+    if not by_date:
+        print("No climbing workouts in the sync window - nothing to upsert.")
+
+
 def main():
     load_dotenv()
     client_id = os.environ['WHOOP_CLIENT_ID']
@@ -111,6 +140,7 @@ def main():
     try:
         access_token = _refresh_access_token(supabase, client_id, client_secret)
         sync_latest(supabase, access_token)
+        sync_climbing_workouts(supabase, access_token)
     except Exception as exc:
         print(f"WHOOP sync failed: {exc}", file=sys.stderr)
         sys.exit(1)

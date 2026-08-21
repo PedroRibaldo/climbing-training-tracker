@@ -50,6 +50,10 @@ def fetch_whoop_enabled():
 def fetch_whoop_metrics():
     return whoop.get_daily_metrics()
 
+@st.cache_data
+def fetch_whoop_workouts():
+    return whoop.get_climbing_workouts()
+
 def refresh_whoop_enabled():
     fetch_whoop_enabled.clear()
 
@@ -77,8 +81,12 @@ if whoop_enabled:
     df_whoop = pd.DataFrame(fetch_whoop_metrics())
     if not df_whoop.empty:
         df_whoop['date'] = pd.to_datetime(df_whoop['date'])
+    df_whoop_workouts = pd.DataFrame(fetch_whoop_workouts())
+    if not df_whoop_workouts.empty:
+        df_whoop_workouts['date'] = pd.to_datetime(df_whoop_workouts['date'])
 else:
     df_whoop = pd.DataFrame()
+    df_whoop_workouts = pd.DataFrame()
 
 # Single combined view of every dated session, used to drive the calendar
 df_all_calendar = pd.concat([df_past, df_future]).dropna(subset=['date']).copy()
@@ -96,7 +104,7 @@ due_df = df_past[due_mask].sort_values(by='date', ascending=False)
 # --- HEADER + KPI STRIP ---
 kpis = compute_kpis(df_past)
 header.render(
-    kpis, whoop_enabled, df_whoop, due_df, df_all_calendar, df_past, df_dict,
+    kpis, whoop_enabled, df_whoop, df_whoop_workouts, due_df, df_all_calendar, df_past, df_dict,
     exercises_before, exercises_during, exercises_after, refresh_data,
 )
 
@@ -117,6 +125,7 @@ else:
 with tab_calendar:
     calendar_tab.render(
         df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data,
+        df_whoop_workouts,
     )
 
 with tab_analytics:
@@ -124,7 +133,7 @@ with tab_analytics:
 
 if whoop_enabled:
     with tab_whoop:
-        whoop_tab.render(df_whoop)
+        whoop_tab.render(df_whoop, df_whoop_workouts)
 
 with tab_library:
     library_tab.render(df_dict, refresh_data)
