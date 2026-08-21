@@ -61,43 +61,17 @@ Every row fetched from Supabase is validated with Pydantic before it reaches the
 ```
 .
 ├── app.py                       # Page setup, caching, tab dispatch
-├── theme.py
+├── theme.py                     # Design: colors, fonts, Plotly template
 ├── data_pipeline/               # Supabase I/O, Pydantic validation, data cleaning, analytics
-│   ├── models.py
-│   ├── client.py
-│   ├── cleaning.py
-│   ├── sessions.py
-│   ├── exercises.py
-│   └── analytics.py
 ├── training_plan/               # Training-plan generation engine
-│   ├── algorithm.py
-│   └── store.py
 ├── whoop/                       # Optional WHOOP integration (Supabase I/O + validation)
-│   ├── models.py
-│   ├── effort.py                # Suggested-effort formula (strain + recovery -> 1-10)
-│   └── store.py
-├── ui/                          # Tab and modal rendering, one module per screen
-│   ├── session_modal.py
-│   ├── exercise_modals.py
-│   ├── calendar_tab.py
-│   ├── analytics_tab.py
-│   ├── library_tab.py
-│   ├── goals_tab.py
-│   └── whoop_tab.py
+├── ui/                          # Tab and modal rendering
 ├── scripts/                     # One-off / scheduled utilities, not part of app.py's import graph
-│   ├── whoop_authorize.py       # One-time local WHOOP OAuth setup
-│   ├── whoop_sync.py            # Daily WHOOP data pull, run by CI
-│   └── requirements-whoop.txt
-├── .github/workflows/
-│   └── whoop_sync.yml           # Scheduled WHOOP sync (manual-trigger only until enabled)
-├── .streamlit/config.toml       # Streamlit theme configuration
-├── tests/
-│   ├── test_data_pipeline.py    # Validation, cleaning, and analytics tests
-│   ├── test_training_plan.py    # Training-plan generation engine tests
-│   ├── test_whoop.py            # WHOOP metrics validation tests
-│   └── test_whoop_effort.py     # Suggested-effort formula tests
-├── requirements.txt
-├── requirements-dev.txt
+├── .github/workflows/           # Scheduled WHOOP sync GitHub Action
+├── .streamlit/                  # Streamlit theme configuration
+├── tests/                       # Pytest suite for data_pipeline, training_plan, and whoop
+├── requirements.txt             # Runtime dependencies
+├── requirements-dev.txt         # + pytest, for testing
 └── .env                         # Local Supabase credentials
 ```
 

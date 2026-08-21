@@ -13,7 +13,7 @@ from training_plan import get_active_goal, check_and_update_goal_completion
 import theme
 import whoop
 
-from ui import session_modal, calendar_tab, analytics_tab, library_tab, goals_tab, whoop_tab
+from ui import header, calendar_tab, analytics_tab, library_tab, goals_tab, whoop_tab
 
 st.set_page_config(page_title="Climbing Training Tracker", page_icon=":material/terrain:", layout="wide")
 
@@ -71,13 +71,7 @@ if completed:
 
 # --- WHOOP TOGGLE (sidebar) ---
 whoop_enabled = fetch_whoop_enabled()
-with st.sidebar:
-    st.subheader(":material/monitor_heart: WHOOP")
-    new_whoop_enabled = st.toggle("Show WHOOP recovery data", value=whoop_enabled)
-    if new_whoop_enabled != whoop_enabled:
-        if whoop.set_enabled(new_whoop_enabled):
-            refresh_whoop_enabled()
-            st.rerun()
+header.render_whoop_toggle(whoop_enabled, refresh_whoop_enabled)
 
 if whoop_enabled:
     df_whoop = pd.DataFrame(fetch_whoop_metrics())
@@ -98,41 +92,13 @@ exercises_after = df_dict[df_dict['phase'] == 'After']['name'].dropna().unique()
 # --- OVERDUE SESSIONS (drives the header notification bell) ---
 due_mask = df_past['effort'].isna() & (df_past['category'] != 'Rest')
 due_df = df_past[due_mask].sort_values(by='date', ascending=False)
-due_count = len(due_df)
 
 # --- HEADER + KPI STRIP ---
-col_title, col_bell = st.columns([10, 1], vertical_alignment="center")
-with col_title:
-    st.title(":material/terrain: Climbing training")
-with col_bell:
-    st.html(theme.notification_bell_css(due_count))
-    bell_help = f"{due_count} overdue session{'s' if due_count != 1 else ''}" if due_count else "You're all caught up"
-    if st.button("", icon=":material/notifications:", key="notif_bell", help=bell_help, disabled=(due_count == 0)):
-        st.session_state.due_sessions_queue = due_df['id'].tolist()
-        st.session_state.due_carousel_index = 0
-        st.session_state.due_carousel_open = True
-
 kpis = compute_kpis(df_past)
-with st.container(horizontal=True):
-    st.metric(":material/local_fire_department: Current streak", f"{kpis['streak']} d", border=True)
-    st.metric(":material/date_range: This week", kpis['sessions_this_week'], border=True)
-    acwr_value = "–" if kpis['acwr_current'] is None else f"{kpis['acwr_current']:.2f}"
-    acwr_delta = None if kpis['acwr_delta'] is None else f"{kpis['acwr_delta']:+.2f}"
-    st.metric(":material/monitoring: ACWR", acwr_value, delta=acwr_delta, delta_color="inverse", border=True)
-    since_last = "–" if kpis['days_since_last'] is None else f"{kpis['days_since_last']} d"
-    st.metric(":material/schedule: Since last session", since_last, border=True)
-    if whoop_enabled and not df_whoop.empty:
-        recovery = df_whoop.iloc[-1]['recovery_score']
-        if pd.notna(recovery):
-            st.metric(":material/monitor_heart: Recovery", f"{int(recovery)}%", border=True)
-
-# --- CATCH UP ON DUE SESSIONS (opened via the header bell) ---
-if st.session_state.get("due_carousel_open", False) and (
-    st.session_state.get("due_carousel_index", 0) < len(st.session_state.get("due_sessions_queue", []))
-):
-    session_modal.due_sessions_carousel(
-        df_all_calendar, df_past, df_whoop, df_dict, exercises_before, exercises_during, exercises_after, refresh_data,
-    )
+header.render(
+    kpis, whoop_enabled, df_whoop, due_df, df_all_calendar, df_past, df_dict,
+    exercises_before, exercises_during, exercises_after, refresh_data,
+)
 
 # --- TOP-LEVEL NAVIGATION ---
 tab_labels = [":material/calendar_month: Calendar", ":material/analytics: Analytics"]
