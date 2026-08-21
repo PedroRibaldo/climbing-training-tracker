@@ -16,13 +16,13 @@ def make_raw_workout(**overrides):
     row = {
         'start': '2026-08-10T14:00:00.000Z',
         'end': '2026-08-10T15:30:00.000Z',
-        'sport_name': 'Rock Climbing',
+        'sport_name': 'rock-climbing',
         'score_state': 'SCORED',
         'score': {
             'kilojoule': 2500.0,
             'average_heart_rate': 130,
             'max_heart_rate': 175,
-            'zone_duration': {
+            'zone_durations': {
                 'zone_zero_milli': 300000,
                 'zone_one_milli': 1200000,
                 'zone_two_milli': 1800000,

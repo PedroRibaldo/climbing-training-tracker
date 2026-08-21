@@ -19,7 +19,7 @@ TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
 RECOVERY_URL = "https://api.prod.whoop.com/developer/v2/recovery"
 CYCLE_URL = "https://api.prod.whoop.com/developer/v2/cycle"
 WORKOUT_URL = "https://api.prod.whoop.com/developer/v2/activity/workout"
-CLIMBING_SPORT_NAME = "Rock Climbing"
+CLIMBING_SPORT_NAME = "rock-climbing"
 
 
 def _refresh_access_token(supabase, client_id: str, client_secret: str) -> str:

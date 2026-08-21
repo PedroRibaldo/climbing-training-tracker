@@ -27,7 +27,7 @@ def normalize_workout(raw: dict) -> dict:
     start = datetime.fromisoformat(raw['start'].replace('Z', '+00:00'))
     end = datetime.fromisoformat(raw['end'].replace('Z', '+00:00'))
     score = raw.get('score') or {}
-    zone_duration = score.get('zone_duration') or {}
+    zone_duration = score.get('zone_durations') or {}
 
     normalized = {
         'duration_min': (end - start).total_seconds() / 60,
