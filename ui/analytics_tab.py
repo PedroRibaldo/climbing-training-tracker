@@ -145,7 +145,6 @@ def render(df_past):
             fig_acwr.update_yaxes(title="ACWR", range=[0, band_top])
             fig_acwr.update_xaxes(title="", type='date', tickformat="%d/%m")
             components.render_chart(fig_acwr)
-            st.caption("Recent (7-day) vs. baseline (28-day) training load. Needs a few weeks of consistent logging to be meaningful.")
 
         components.chart_or_empty(
             not acwr_windowed.empty and acwr_windowed['acwr'].notna().any(),

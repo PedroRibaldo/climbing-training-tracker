@@ -22,6 +22,7 @@ class PlanConfig:
     PLANNED_CATEGORIES = ['Strength', 'Stamina', 'Technique']
 
     MIN_PLAN_WEEKS = 6
+    ACHIEVED_GRADE_MIN_SENDS = 5
     DEFAULT_STEP_BASE_WEEKS = 6
     DEFAULT_STEP_INCREMENT_WEEKS = 2
     NEGLECT_INFLUENCE = 0.5
@@ -306,6 +307,34 @@ def _current_best_grade(df_past: pd.DataFrame, target_type: str, config: Pipelin
     return valid.loc[valid[numeric_col].idxmax(), grade_col]
 
 
+def _current_achieved_grade(df_past: pd.DataFrame, target_type: str, config: PipelineConfig) -> str:
+    """Highest grade with PlanConfig.ACHIEVED_GRADE_MIN_SENDS+ logged sends -
+    grades below it count as achieved too, via ordinal comparison at the
+    call site. Falls back to the second-highest distinct grade ever logged
+    (regardless of its own send count) when nothing has hit the threshold
+    yet, to avoid a single outlier send setting the baseline. Floors at the
+    lowest grade in the system when there isn't even that much history."""
+    grade_mapping = config.GYM_MAPPING if target_type == 'gym' else config.MOONBOARD_MAPPING
+    numeric_col = 'gym_numeric' if target_type == 'gym' else 'moonboard_numeric'
+    grade_col = 'gym_grade' if target_type == 'gym' else 'moonboard_grade'
+    lowest_grade = min(grade_mapping, key=grade_mapping.get)
+
+    if df_past.empty or numeric_col not in df_past.columns:
+        return lowest_grade
+    valid = df_past[df_past[numeric_col] != -1]
+    if valid.empty:
+        return lowest_grade
+
+    counts = valid[grade_col].value_counts()
+    logged_sorted = sorted(counts.index, key=lambda g: grade_mapping[g], reverse=True)
+
+    for grade in logged_sorted:
+        if counts[grade] >= PlanConfig.ACHIEVED_GRADE_MIN_SENDS:
+            return grade
+
+    return logged_sorted[1] if len(logged_sorted) >= 2 else lowest_grade
+
+
 def _recent_daily_loads(df_past: pd.DataFrame, window: int = 28) -> list[float]:
     """Daily training load for the last `window` days ending yesterday,
     zero-filled for days with no session."""
@@ -403,7 +432,7 @@ def preview_plan(
     writing anything."""
     if config is None:
         config = PipelineConfig()
-    current_grade = _current_best_grade(df_past, target_type, config)
+    current_grade = _current_achieved_grade(df_past, target_type, config)
     neglect_scores = _category_neglect_scores(df_past)
     effort_overrides = _category_effort_overrides(df_past)
     start_weekday = pd.to_datetime('today').normalize().weekday()

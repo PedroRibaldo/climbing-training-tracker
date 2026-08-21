@@ -14,8 +14,7 @@ from . import components
 
 def render(active_goal, df_past, df_future, df_dict, refresh_data, refresh_all):
     if active_goal is None:
-        st.caption("Set a grade goal and get a generated training plan to reach it.")
-
+        
         target_type_label = st.radio("Grade system", ["Gym", "Moonboard"], horizontal=True)
         target_type = 'gym' if target_type_label == 'Gym' else 'moonboard'
         grade_opts = list(PipelineConfig.GYM_MAPPING.keys() if target_type == 'gym' else PipelineConfig.MOONBOARD_MAPPING.keys())

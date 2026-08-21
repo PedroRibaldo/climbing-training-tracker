@@ -144,7 +144,7 @@ CREATE TABLE goals (
     created_at TIMESTAMP DEFAULT now(),
     target_type TEXT NOT NULL,              -- 'gym' | 'moonboard'
     target_grade TEXT NOT NULL,
-    start_grade TEXT,                       -- best grade of that type logged when the goal was created
+    start_grade TEXT,                       -- achieved grade of that type when the goal was created
     weekly_frequency INTEGER NOT NULL,      -- derived as len(training_weekdays)
     training_weekdays JSONB NOT NULL,       -- e.g. ["Wednesday","Thursday","Saturday"]
     total_weeks INTEGER NOT NULL,

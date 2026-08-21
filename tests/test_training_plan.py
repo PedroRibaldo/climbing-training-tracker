@@ -15,8 +15,8 @@ from data_pipeline import PipelineConfig
 from training_plan import (
     PlanConfig, GoalRecord, compute_plan_length, build_phase_breakdown, schedule_week,
     _training_day_slots, apply_acwr_guardrail, _category_neglect_scores, _category_effort_overrides,
-    select_exercises_for_day, generate_plan, preview_plan, _current_best_grade, _recent_daily_loads,
-    _existing_session_dates, compute_adherence,
+    select_exercises_for_day, generate_plan, preview_plan, _current_best_grade, _current_achieved_grade,
+    _recent_daily_loads, _existing_session_dates, compute_adherence, check_and_update_goal_completion,
 )
 
 
@@ -447,6 +447,63 @@ class TestCurrentBestGrade:
         assert _current_best_grade(df_past, 'gym', PipelineConfig()) is None
 
 
+class TestCurrentAchievedGrade:
+
+    def test_highest_logged_grade_with_five_sends_is_returned(self, config):
+        rows = [
+            {'date': '2026-06-01', 'gym_grade': 'Blue', 'gym_numeric': 3, 'moonboard_grade': None, 'moonboard_numeric': -1},
+        ] * 5
+        df_past = make_past_df(rows)
+        assert _current_achieved_grade(df_past, 'gym', PipelineConfig()) == 'Blue'
+
+    def test_cascades_down_to_a_lower_grade_with_five_sends(self, config):
+        rows = (
+            [{'date': '2026-06-01', 'gym_grade': 'Red', 'gym_numeric': 4, 'moonboard_grade': None, 'moonboard_numeric': -1}] * 2
+            + [{'date': '2026-06-02', 'gym_grade': 'Blue', 'gym_numeric': 3, 'moonboard_grade': None, 'moonboard_numeric': -1}] * 5
+        )
+        df_past = make_past_df(rows)
+        # Red (highest logged) only has 2 sends - not enough. Blue has 5, so
+        # the cascade skips Red and lands on Blue.
+        assert _current_achieved_grade(df_past, 'gym', PipelineConfig()) == 'Blue'
+
+    def test_falls_back_to_second_highest_logged_when_nothing_has_five_sends(self, config):
+        rows = (
+            [{'date': '2026-06-01', 'gym_grade': 'Red', 'gym_numeric': 4, 'moonboard_grade': None, 'moonboard_numeric': -1}] * 1
+            + [{'date': '2026-06-02', 'gym_grade': 'Green', 'gym_numeric': 2, 'moonboard_grade': None, 'moonboard_numeric': -1}] * 3
+        )
+        df_past = make_past_df(rows)
+        # Neither Red (1 send) nor Green (3 sends) has hit 5 yet, so the
+        # fallback uses Green - the second-highest distinct grade logged -
+        # rather than treating the single Red send as the baseline.
+        assert _current_achieved_grade(df_past, 'gym', PipelineConfig()) == 'Green'
+
+    def test_floors_to_lowest_grade_with_only_one_distinct_grade_logged(self, config):
+        rows = [
+            {'date': '2026-06-01', 'gym_grade': 'Red', 'gym_numeric': 4, 'moonboard_grade': None, 'moonboard_numeric': -1},
+        ] * 2
+        df_past = make_past_df(rows)
+        assert _current_achieved_grade(df_past, 'gym', PipelineConfig()) == 'White'
+
+    def test_floors_to_lowest_grade_when_nothing_logged(self, config):
+        df_past = make_past_df([])
+        assert _current_achieved_grade(df_past, 'gym', PipelineConfig()) == 'White'
+
+    def test_fallback_never_overrides_an_already_achieved_grade(self, config):
+        rows = (
+            [{'date': '2026-05-01', 'gym_grade': 'Blue', 'gym_numeric': 3, 'moonboard_grade': None, 'moonboard_numeric': -1}] * 5
+            + [{'date': '2026-06-01', 'gym_grade': 'Red', 'gym_numeric': 4, 'moonboard_grade': None, 'moonboard_numeric': -1}] * 4
+        )
+        df_past = make_past_df(rows)
+        # Blue already qualifies (5 sends). Red has since been attempted 4
+        # times but hasn't hit 5, so current grade stays Blue rather than
+        # jumping to Red early.
+        assert _current_achieved_grade(df_past, 'gym', PipelineConfig()) == 'Blue'
+
+    def test_moonboard_floor_resolves_to_v0_not_v1(self, config):
+        df_past = make_past_df([])
+        assert _current_achieved_grade(df_past, 'moonboard', PipelineConfig()) == 'V0'
+
+
 class TestRecentDailyLoads:
 
     def test_returns_window_length(self, config):
@@ -569,7 +626,10 @@ class TestPreviewPlan:
         training_weekdays = {0, 2, 4}
         start_weekday = pd.to_datetime('today').normalize().weekday()
         result = preview_plan('gym', 'Blue', training_weekdays, df_past, df_dict)
-        expected = generate_plan(None, 'gym', 'Blue', training_weekdays, start_weekday, _recent_daily_loads(df_past), df_dict)
+        # With no history at all, _current_achieved_grade floors to 'White'
+        # (ordinal 0), not None - so the matching generate_plan call must
+        # pass 'White' too, not None.
+        expected = generate_plan('White', 'gym', 'Blue', training_weekdays, start_weekday, _recent_daily_loads(df_past), df_dict)
         assert result['total_weeks'] == expected['total_weeks']
 
     def test_ignores_non_monotonic_grade_history(self, config):
@@ -579,13 +639,13 @@ class TestPreviewPlan:
         ])
         df_dict = pd.DataFrame(columns=['name', 'phase', 'categories'])
         result = preview_plan('gym', 'Black', {0, 2, 4}, df_past, df_dict)
-        # Current best grade is Red (ordinal 4, the highest logged) -> Black
-        # (ordinal 6): step 5 (Red->Purple, 14) + step 6 (Purple->Black, 16)
-        # = 30 weeks. Blue was logged chronologically *after* Red here (a
-        # realistic, non-monotonic log order) - before this fix, that
-        # produced a negative personalized pace that collapsed the whole
-        # plan to a flat 6 weeks regardless of distance.
-        assert result['total_weeks'] == 30
+        # Neither Red (1 send) nor Blue (1 send) has hit the 5-send
+        # threshold, so _current_achieved_grade falls back to the
+        # second-highest distinct grade logged - Blue - regardless of the
+        # fact that Blue was logged chronologically *after* Red here (a
+        # realistic, non-monotonic log order). Blue (ordinal 3) -> Black
+        # (ordinal 6): step 4 (12) + step 5 (14) + step 6 (16) = 42 weeks.
+        assert result['total_weeks'] == 42
 
 
 class TestGoalRecord:
@@ -669,3 +729,33 @@ class TestComputeAdherence:
     def test_empty_df_past_returns_zero(self):
         df_past = pd.DataFrame({'goal_id': [], 'category': [], 'effort': []})
         assert compute_adherence(df_past, goal_id=1) == {'scheduled': 0, 'logged': 0}
+
+
+class TestCheckAndUpdateGoalCompletion:
+
+    def test_returns_false_when_target_grade_was_only_achieved_before_goal_started(self, config):
+        # Regression: a Purple send logged *before* this goal existed must
+        # not retroactively complete a goal that hasn't actually been
+        # trained toward yet. This case never reaches Supabase (the
+        # function returns before any client call), so it's safely
+        # testable without a live connection.
+        goal = {
+            'id': 1, 'target_type': 'gym', 'target_grade': 'Purple',
+            'created_at': datetime(2026, 6, 1),
+        }
+        df_past = make_past_df([
+            {'date': '2026-05-01', 'gym_grade': 'Purple', 'gym_numeric': 5, 'moonboard_grade': None, 'moonboard_numeric': -1},
+        ])
+        df_future = pd.DataFrame(columns=['id', 'goal_id', 'effort'])
+        assert check_and_update_goal_completion(goal, df_past, df_future) is False
+
+    def test_returns_false_when_nothing_logged_since_goal_started(self, config):
+        goal = {
+            'id': 1, 'target_type': 'gym', 'target_grade': 'Yellow',
+            'created_at': datetime(2026, 6, 1),
+        }
+        df_past = make_past_df([
+            {'date': '2026-05-01', 'gym_grade': 'Yellow', 'gym_numeric': 1, 'moonboard_grade': None, 'moonboard_numeric': -1},
+        ])
+        df_future = pd.DataFrame(columns=['id', 'goal_id', 'effort'])
+        assert check_and_update_goal_completion(goal, df_past, df_future) is False

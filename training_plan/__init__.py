@@ -19,7 +19,7 @@ from .algorithm import (
     compute_adherence,
     _adjust_weights_for_neglect, _training_day_slots, _swrr_pick, _simulated_acwr,
     _downgrade_if_needed, _category_neglect_scores,
-    _category_effort_overrides, _rotate_pick, _bool_col, _current_best_grade,
+    _category_effort_overrides, _rotate_pick, _bool_col, _current_best_grade, _current_achieved_grade,
     _recent_daily_loads, _generate_days_for_range,
 )
 from .store import (

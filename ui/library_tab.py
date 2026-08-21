@@ -10,7 +10,6 @@ from . import exercise_modals
 
 
 def render(df_dict, refresh_data):
-    st.caption("Click any exercise below to edit or delete it.")
 
     if st.button("Add new exercise", icon=":material/add:", type="primary"):
         exercise_modals.add_exercise_modal(df_dict, refresh_data)

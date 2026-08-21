@@ -12,7 +12,6 @@ from . import session_modal
 
 
 def render(df_all_calendar, df_past, df_dict, exercises_before, exercises_during, exercises_after, refresh_data):
-    st.caption("Click any colored session to edit it, or click a blank day to log a missed session.")
     st.html(theme.color_key_html(theme.CATEGORY_COLORS, title="Category key"))
 
     # Sessions are rendered as full-day background color blocks rather than

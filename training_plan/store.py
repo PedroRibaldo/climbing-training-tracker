@@ -12,8 +12,8 @@ from pydantic import ValidationError
 
 from data_pipeline import PipelineConfig, _get_supabase_client
 from .algorithm import (
-    PlanConfig, GoalRecord, preview_plan, _current_best_grade, _category_effort_overrides,
-    _generate_days_for_range, _recent_daily_loads,
+    PlanConfig, GoalRecord, preview_plan, _current_best_grade, _current_achieved_grade,
+    _category_effort_overrides, _generate_days_for_range, _recent_daily_loads,
 )
 
 
@@ -98,7 +98,7 @@ def create_goal_and_plan(
         goal_response = client.table(PlanConfig.GOALS_TABLE).insert({
             'target_type': target_type,
             'target_grade': target_grade,
-            'start_grade': _current_best_grade(df_past, target_type, config),
+            'start_grade': _current_achieved_grade(df_past, target_type, config),
             'weekly_frequency': len(training_weekdays),
             'training_weekdays': [PlanConfig.WEEKDAY_NAMES[i] for i in sorted(training_weekdays)],
             'total_weeks': plan['total_weeks'],
@@ -194,12 +194,21 @@ def check_and_update_goal_completion(
     goal: dict, df_past: pd.DataFrame, df_future: pd.DataFrame, config: Optional[PipelineConfig] = None,
 ) -> bool:
     """Marks the goal completed and cleans up remaining sessions if the
-    target grade's been reached. Returns True if it just changed."""
+    target grade's been reached since the goal was created - a grade sent
+    before the goal started doesn't retroactively complete it. Returns True
+    if it just changed."""
     if config is None:
         config = PipelineConfig()
     grade_mapping = PipelineConfig.GYM_MAPPING if goal['target_type'] == 'gym' else PipelineConfig.MOONBOARD_MAPPING
     target_ordinal = grade_mapping[goal['target_grade']]
-    current_grade = _current_best_grade(df_past, goal['target_type'], config)
+
+    if df_past.empty or 'date' not in df_past.columns:
+        sessions_since_goal_started = df_past
+    else:
+        created_at = pd.to_datetime(goal['created_at']).normalize()
+        sessions_since_goal_started = df_past[df_past['date'] >= created_at]
+
+    current_grade = _current_best_grade(sessions_since_goal_started, goal['target_type'], config)
     current_ordinal = grade_mapping.get(current_grade, -1)
     if current_ordinal < target_ordinal:
         return False
